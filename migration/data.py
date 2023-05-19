@@ -23,3 +23,9 @@ class ExternalToolTab:
     tool_id: int
     is_hidden: bool
     position: int
+
+
+@dataclass(frozen=True)
+class ToolMigration:
+    source_id: int
+    target_id: int

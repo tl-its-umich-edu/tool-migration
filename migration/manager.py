@@ -17,7 +17,8 @@ class AccountManager:
     api: API
 
     def get_tools_installed_in_account(self) -> list[ExternalTool]:
-        results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/external_tools')
+        params = {"include_parents": True}
+        results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/external_tools', params)
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         logger.info(f'Number of tools found in account {self.account_id}: {len(tools)}')
         return tools
@@ -51,7 +52,7 @@ class CourseManager:
         
         tabs: list[ExternalToolTab] = []
         for result in results:
-            logger.info(result)
+            logger.debug(result)
             if result['type'] == 'external':
                 tool_id = int(result['id'].replace(self.id_prefix, ''))
                 tabs.append(ExternalToolTab(
@@ -71,10 +72,14 @@ class CourseManager:
         return None
 
     def replace_tool_tab(self, source_tab: ExternalToolTab, target_tab: ExternalToolTab) -> None:
+        target_tab_params: dict[str, Any] = {"hidden": False}
+        if not source_tab.is_hidden:
+            target_tab_params.update({"position": source_tab.position})
+
         try:
             resp = self.api.client.put(
                 f'/courses/{self.course.id}/tabs/{target_tab.id}',
-                params={ "hidden": False, "position": source_tab.position }
+                params=target_tab_params
             )
             resp.raise_for_status()
         except httpx.HTTPError as e:
@@ -85,7 +90,7 @@ class CourseManager:
         try:
             resp = self.api.client.put(
                 f'/courses/{self.course.id}/tabs/{source_tab.id}',
-                params={ "hidden": True }
+                params={"hidden": True}
             )
             resp.raise_for_status()
         except httpx.HTTPError as e:

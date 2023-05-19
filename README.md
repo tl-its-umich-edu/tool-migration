@@ -21,11 +21,13 @@ There will likely be other ways to configure in the future, such as a CLI, promp
 
 ### Usage
 
-To be continued...
+```
+python migration/main.py
+```
+
 
 ### Testing
 
 ```
-cd migration
-python3 tests.py
+python migration/tests.py -v
 ```
