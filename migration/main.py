@@ -43,7 +43,7 @@ def main(api: API, account_id: int, term_id: int, migrations: list[ToolMigration
 
         # get list of tools available in account
         courses = account_manager.get_courses_in_account_for_term(term_id)
-        logger.info(f'Number of courses in account: {len(courses)}')
+        logger.info(f'Number of tools found in account {account_id}: {len(tools)}')
 
         for source_tool, target_tool in tool_pairs:
             logger.info(f'Source tool: {source_tool}')
@@ -66,6 +66,9 @@ def main(api: API, account_id: int, term_id: int, migrations: list[ToolMigration
 if __name__ == '__main__':
     # get configuration (either env. variables, cli flags, or direct input)
 
+    root_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    load_dotenv(os.path.join(root_dir, '.env'), verbose=True)
+
     # Set up logging
     log_level = os.getenv('LOG_LEVEL', 'INFO')
     http_log_level = os.getenv('HTTP_LOG_LEVEL', 'WARN')
@@ -75,9 +78,6 @@ if __name__ == '__main__':
     httpx_logger.setLevel(http_log_level)
     httpcore_level = logging.getLogger('httpcore')
     httpcore_level.setLevel(http_log_level)
-
-    root_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    load_dotenv(os.path.join(root_dir, '.env'), verbose=True)
 
     api_url: str = os.getenv('API_URL', '')
     api_key: str = os.getenv('API_KEY', '')

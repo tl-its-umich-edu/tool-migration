@@ -47,6 +47,7 @@ class AccountManagerTestCase(unittest.TestCase):
             tools = manager.get_tools_installed_in_account()
         self.assertTrue(len(tools) > 0)
         for tool in tools:
+            logger.debug(tool)
             self.assertTrue(isinstance(tool, ExternalTool))
 
     def test_manager_get_courses(self):
@@ -86,6 +87,16 @@ class CourseManagerTestCase(unittest.TestCase):
         for tab in tabs:
             self.assertTrue(isinstance(tab, ExternalToolTab))
 
+    def test_update_tool_tab_with_position(self):
+        with self.api.client:
+            tabs = self.course_manager.get_tool_tabs()
+            source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs)
+            if source_tab is None:
+                raise InvalidToolIdsException(f'Tool with ID {self.source_tool_id} is not available in this course')
+            new_tab = self.course_manager.update_tool_tab(source_tab, is_hidden=not source_tab.is_hidden, position=5)
+            self.assertNotEqual(new_tab.is_hidden, source_tab.is_hidden)
+            self.assertEqual(new_tab.position, 5)
+
     def test_manager_replaces_tool_tab_in_course(self):
         with self.api.client:
             tabs_before = self.course_manager.get_tool_tabs()
@@ -93,7 +104,7 @@ class CourseManagerTestCase(unittest.TestCase):
             target_tab = CourseManager.find_tab_by_tool_id(self.target_tool_id, tabs_before)
             if source_tab is None or target_tab is None:
                 raise Exception(
-                    'One or both of the following tool IDs are not available in this course: ' +
+                    'One or both of the tools with these IDs are not available in this course: ' +
                     str([self.source_tool_id, self.target_tool_id])
                 )
             source_original_position = source_tab.position
@@ -156,7 +167,16 @@ class MainTestCase(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    logging.basicConfig(level='INFO')
     root_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     load_dotenv(os.path.join(root_dir, '.env'), verbose=True)
+
+    log_level = os.getenv('LOG_LEVEL', 'INFO')
+    http_log_level = os.getenv('HTTP_LOG_LEVEL', 'WARN')
+    logging.basicConfig(level=log_level)
+
+    httpx_logger = logging.getLogger('httpx')
+    httpx_logger.setLevel(http_log_level)
+    httpcore_level = logging.getLogger('httpcore')
+    httpcore_level.setLevel(http_log_level)
+
     unittest.main()
