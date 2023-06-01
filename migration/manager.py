@@ -23,12 +23,11 @@ class AccountManager:
         return tools
 
     def get_courses_in_terms(self, term_ids: list[int], bail_after: int | None = None) -> list[Course]:
-        results: list[dict[str, Any]] = []
-
         limit_per_term = None
         if bail_after is not None:
             limit_per_term = bail_after // len(term_ids)
 
+        results: list[dict[str, Any]] = []
         for term_id in term_ids:
             term_results = self.api.get_results_from_pages(
                 f'/accounts/{self.account_id}/courses',
