@@ -7,7 +7,7 @@ from api import API
 from data import ExternalTool, ToolMigration
 from exceptions import InvalidToolIdsException
 from manager import AccountManager, CourseManager
-from utils import find_entity_by_id
+from utils import find_entity_by_id, convert_csv_to_int_list
 
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ def find_tools_for_migrations(
     return tool_pairs
 
 
-def main(api: API, account_id: int, term_id: int, migrations: list[ToolMigration]):
+def main(api: API, account_id: int, term_ids: list[int], migrations: list[ToolMigration]):
     account_manager = AccountManager(account_id, api)
     
     with api.client:
@@ -42,7 +42,7 @@ def main(api: API, account_id: int, term_id: int, migrations: list[ToolMigration
         tool_pairs = find_tools_for_migrations(tools, migrations)
 
         # get list of tools available in account
-        courses = account_manager.get_courses_in_account_for_term(term_id)
+        courses = account_manager.get_courses_in_terms(term_ids)
         logger.info(f'Number of tools found in account {account_id}: {len(tools)}')
 
         for source_tool, target_tool in tool_pairs:
@@ -82,7 +82,7 @@ if __name__ == '__main__':
     api_url: str = os.getenv('API_URL', '')
     api_key: str = os.getenv('API_KEY', '')
     account_id: int = int(os.getenv('ACCOUNT_ID', '0'))
-    enrollment_term_id:  int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
+    enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
 
     source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
     target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
@@ -90,6 +90,6 @@ if __name__ == '__main__':
     main(
         API(api_url, api_key),
         account_id,
-        enrollment_term_id,
+        enrollment_term_ids,
         [ToolMigration(source_id=source_tool_id, target_id=target_tool_id)]
     )
