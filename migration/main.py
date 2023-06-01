@@ -7,7 +7,7 @@ from api import API
 from data import ExternalTool, ToolMigration
 from exceptions import InvalidToolIdsException
 from manager import AccountManager, CourseManager
-from utils import find_entity_by_id, convert_csv_to_int_list
+from utils import convert_csv_to_int_list, find_entity_by_id
 
 
 logger = logging.getLogger(__name__)
