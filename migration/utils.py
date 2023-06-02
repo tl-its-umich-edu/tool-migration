@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=CanvasEntity)
 
+
 def find_entity_by_id(id: int, entities: list[T]) -> T | None:
     for entity in entities:
         if entity.id == id:
