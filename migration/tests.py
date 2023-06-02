@@ -53,10 +53,14 @@ class AccountManagerTestCase(unittest.TestCase):
     def test_manager_get_courses_in_single_term(self):
         with self.api.client:
             manager = AccountManager(1, self.api)
-            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
+            courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
         self.assertTrue(len(courses) > 0)
+        term_ids: list[int] = []
         for course in courses:
             self.assertTrue(isinstance(course, Course))
+            term_ids.append(course.enrollment_term_id)
+        term_id_set = set(term_ids)
+        self.assertTrue(len(term_id_set) == 1)
 
     def test_manager_get_courses_in_multiple_term(self):
         with self.api.client:
@@ -149,10 +153,16 @@ class UtilsTestCase(unittest.TestCase):
         int_list = convert_csv_to_int_list('6,7,8')
         for elem in int_list:
             self.assertIsInstance(elem, int)
+        int_list = convert_csv_to_int_list('6')
+        self.assertIsInstance(int_list[0], int)
 
     def test_convert_csv_to_int_list_when_invalid(self):
         with self.assertRaises(ConfigException):
             convert_csv_to_int_list('6,7,blahblah,8')
+        with self.assertRaises(ConfigException):
+            convert_csv_to_int_list(',')
+        with self.assertRaises(ConfigException):
+            convert_csv_to_int_list('')
 
 
 class MainTestCase(unittest.TestCase):
