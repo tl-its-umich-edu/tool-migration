@@ -1,7 +1,9 @@
 import logging
 import os
 import unittest
+from unittest.mock import MagicMock
 
+import httpx
 from dotenv import load_dotenv
 
 from data import Course, ExternalTool, ExternalToolTab, ToolMigration
@@ -14,6 +16,39 @@ from utils import convert_csv_to_int_list, find_entity_by_id
 logger = logging.getLogger(__name__)
 
 
+class APITestCase(unittest.TestCase):
+    """
+    Integration/unit tests for API class
+    """
+
+    def setUp(self) -> None:
+        self.api_url: str = os.getenv('API_URL', '')
+        api_key: str = os.getenv('API_KEY', '')
+        self.api = API(self.api_url, api_key)
+        self.account_id = int(os.getenv('ACCOUNT_ID', 0))
+
+    def test_get_next_page_params_with_no_next_page(self):
+        mock_response = MagicMock(httpx.Response)
+        mock_response.links = {
+            'next': {
+                'url': f'{self.api_url}/api/v1/accounts/{self.account_id}/courses/?page=2&per_page=5',
+                'rel': 'next'
+            }
+        }
+        params = API.get_next_page_params(mock_response)
+        self.assertEqual(params, { 'page': ['2'], 'per_page': ['5'] })
+
+    def test_get_results_from_pages(self):
+        with self.api.client:
+            results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5)
+        self.assertTrue(len(results) > 1)
+
+    def test_get_results_from_pages_with_limit(self):
+        with self.api.client:
+            results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5, limit=2)
+        self.assertTrue(len(results) == 2)
+
+
 class AccountManagerTestCase(unittest.TestCase):
     """
     Integration/unit tests for AccountManager class
@@ -22,6 +57,7 @@ class AccountManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
+        self.account_id = int(os.getenv('ACCOUNT_ID', 0))
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
 
@@ -43,7 +79,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
     def test_manager_gets_tools(self):
         with self.api.client:
-            manager = AccountManager(1, self.api)
+            manager = AccountManager(self.account_id, self.api)
             tools = manager.get_tools_installed_in_account()
         self.assertTrue(len(tools) > 0)
         for tool in tools:
@@ -52,7 +88,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
     def test_manager_get_courses_in_single_term(self):
         with self.api.client:
-            manager = AccountManager(1, self.api)
+            manager = AccountManager(self.account_id, self.api)
             courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
@@ -64,7 +100,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
     def test_manager_get_courses_in_multiple_term(self):
         with self.api.client:
-            manager = AccountManager(1, self.api)
+            manager = AccountManager(self.account_id, self.api)
             courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
@@ -73,6 +109,15 @@ class AccountManagerTestCase(unittest.TestCase):
             term_ids.append(course.enrollment_term_id)
         term_id_set = set(term_ids)
         self.assertTrue(len(term_id_set) > 1)
+
+    def test_manager_get_courses_with_limit(self):
+        with self.api.client:
+            manager = AccountManager(self.account_id, self.api)
+            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 50)
+        self.assertTrue(len(courses) > 0)
+        for course in courses:
+            self.assertTrue(isinstance(course, Course))
+        self.assertTrue(len(courses) <= 50)
 
 
 class CourseManagerTestCase(unittest.TestCase):

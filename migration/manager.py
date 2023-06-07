@@ -22,10 +22,10 @@ class AccountManager:
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         return tools
 
-    def get_courses_in_terms(self, term_ids: list[int], bail_after: int | None = None) -> list[Course]:
+    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
         limit_per_term = None
-        if bail_after is not None:
-            limit_per_term = bail_after // len(term_ids)
+        if limit is not None:
+            limit_per_term = limit // len(term_ids)
 
         results: list[dict[str, Any]] = []
         for term_id in term_ids:
@@ -33,7 +33,7 @@ class AccountManager:
                 f'/accounts/{self.account_id}/courses',
                 params={ 'enrollment_term_id': term_id },
                 page_size=50,
-                bail_after=limit_per_term
+                limit=limit_per_term
             )
             results += term_results
         courses = [

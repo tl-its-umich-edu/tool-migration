@@ -21,7 +21,8 @@ class API:
         headers = { 'Authorization': f'Bearer {key}'}
         self.client = httpx.Client(base_url=url + endpoint_type.value, headers=headers)
 
-    def get_next_page_params(self, resp: httpx.Response) -> dict[str, Any] | None:
+    @staticmethod
+    def get_next_page_params(resp: httpx.Response) -> dict[str, Any] | None:
         if 'next' not in resp.links:
             return None
         else:
@@ -29,7 +30,7 @@ class API:
             return query_params
 
     def get_results_from_pages(
-        self, endpoint: str, params: dict[str, Any] | None = None, page_size: int = 50, bail_after: int | None = None
+        self, endpoint: str, params: dict[str, Any] | None = None, page_size: int = 50, limit: int | None = None
     ) -> list[dict[str, Any]]:
         extra_params: dict[str, Any]
         if params is not None:
@@ -51,14 +52,17 @@ class API:
                 logger.error(f"HTTP Exception for {exc.request.url} - {exc}")
                 raise exc
             results += resp.json()
-            next_page_params = self.get_next_page_params(resp)
+            next_page_params = API.get_next_page_params(resp)
             if next_page_params is None:
                 more_pages = False
-            elif bail_after is not None and bail_after <= len(results):
+            elif limit is not None and limit <= len(results):
                 more_pages = False
             else:
                 extra_params.update(next_page_params)
                 page_num += 1
+
+        if limit is not None:
+            results = results[:limit]
 
         logger.debug(f'Number of results: {len(results)}')
         logger.debug(f'Number of pages: {page_num}')
