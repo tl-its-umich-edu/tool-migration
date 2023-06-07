@@ -51,7 +51,7 @@ class APITestCase(unittest.TestCase):
 
 class AccountManagerTestCase(unittest.TestCase):
     """
-    Integration/unit tests for AccountManager class
+    Integration tests for AccountManager class
     """
 
     def setUp(self) -> None:
@@ -60,22 +60,6 @@ class AccountManagerTestCase(unittest.TestCase):
         self.account_id = int(os.getenv('ACCOUNT_ID', 0))
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
-
-        self.test_external_tool_tab = ExternalToolTab(
-            id='context_external_tool_99999',
-            label='Test External Tool',
-            tool_id=99999,
-            is_hidden=True,
-            position=30
-        )
-
-    def test_find_tab_by_tool_id_returns_tab(self):
-        tab = CourseManager.find_tab_by_tool_id(99999, [self.test_external_tool_tab])
-        self.assertTrue(isinstance(tab, ExternalToolTab))
-
-    def test_find_tab_by_tool_id_returns_none(self):
-        tab = CourseManager.find_tab_by_tool_id(100000, [self.test_external_tool_tab])
-        self.assertTrue(tab is None)
 
     def test_manager_gets_tools(self):
         with self.api.client:
@@ -122,7 +106,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
 class CourseManagerTestCase(unittest.TestCase):
     """
-    Integration tests for CourseManager class
+    Integration/unit tests for CourseManager class
     """
 
     def setUp(self):
@@ -137,6 +121,22 @@ class CourseManagerTestCase(unittest.TestCase):
         )
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
         self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
+
+        self.test_external_tool_tab = ExternalToolTab(
+            id='context_external_tool_99999',
+            label='Test External Tool',
+            tool_id=99999,
+            is_hidden=True,
+            position=30
+        )
+
+    def test_find_tab_by_tool_id_returns_tab(self):
+        tab = CourseManager.find_tab_by_tool_id(99999, [self.test_external_tool_tab])
+        self.assertTrue(isinstance(tab, ExternalToolTab))
+
+    def test_find_tab_by_tool_id_returns_none(self):
+        tab = CourseManager.find_tab_by_tool_id(100000, [self.test_external_tool_tab])
+        self.assertTrue(tab is None)
 
     def test_manager_gets_tool_tabs_in_course(self):
         with self.api.client:
