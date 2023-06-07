@@ -18,7 +18,7 @@ class API:
     client: httpx.Client
 
     def __init__(self, url: str, key: str, endpoint_type: EndpointType = EndpointType.REST):
-        headers = { 'Authorization': f'Bearer {key}'}
+        headers = { 'Authorization': f'Bearer {key}' }
         self.client = httpx.Client(base_url=url + endpoint_type.value, headers=headers)
 
     @staticmethod
@@ -61,7 +61,7 @@ class API:
                 extra_params.update(next_page_params)
                 page_num += 1
 
-        if limit is not None:
+        if limit is not None and len(results) > limit:
             results = results[:limit]
 
         logger.debug(f'Number of results: {len(results)}')

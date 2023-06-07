@@ -10,7 +10,7 @@ from data import Course, ExternalTool, ExternalToolTab, ToolMigration
 from exceptions import ConfigException, InvalidToolIdsException
 from main import main, find_tools_for_migrations
 from manager import API, AccountManager, CourseManager
-from utils import convert_csv_to_int_list, find_entity_by_id
+from utils import convert_csv_to_int_list, find_entity_by_id, chunk_integer
 
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,7 @@ class AccountManagerTestCase(unittest.TestCase):
         term_id_set = set(term_ids)
         self.assertTrue(len(term_id_set) == 1)
 
-    def test_manager_get_courses_in_multiple_term(self):
+    def test_manager_get_courses_in_multiple_terms(self):
         with self.api.client:
             manager = AccountManager(self.account_id, self.api)
             courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
@@ -208,6 +208,16 @@ class UtilsTestCase(unittest.TestCase):
             convert_csv_to_int_list(',')
         with self.assertRaises(ConfigException):
             convert_csv_to_int_list('')
+
+    def test_chunk_integer(self):
+        chunks = chunk_integer(150, 3)
+        self.assertEqual(chunks, [50, 50, 50])
+        chunks = chunk_integer(5, 2)
+        self.assertEqual(chunks, [3, 2])
+        chunks = chunk_integer(23, 5)
+        self.assertEqual(chunks, [5, 5, 5, 4, 4])
+        chunks = chunk_integer(14, 4)
+        self.assertEqual(chunks, [4, 4, 3, 3])
 
 
 class MainTestCase(unittest.TestCase):

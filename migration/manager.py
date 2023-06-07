@@ -6,6 +6,7 @@ import httpx
 
 from api import API
 from data import Course, ExternalTool, ExternalToolTab
+from utils import chunk_integer
 
 
 logger = logging.getLogger(__name__)
@@ -23,17 +24,16 @@ class AccountManager:
         return tools
 
     def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
-        limit_per_term = None
         if limit is not None:
-            limit_per_term = limit // len(term_ids)
+            limit_chunks = chunk_integer(limit, len(term_ids))
 
         results: list[dict[str, Any]] = []
-        for term_id in term_ids:
+        for i, term_id in enumerate(term_ids):
             term_results = self.api.get_results_from_pages(
                 f'/accounts/{self.account_id}/courses',
                 params={ 'enrollment_term_id': term_id },
                 page_size=50,
-                limit=limit_per_term
+                limit=limit_chunks[i] if limit_chunks else None
             )
             results += term_results
         courses = [
