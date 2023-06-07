@@ -5,10 +5,10 @@ import unittest
 from dotenv import load_dotenv
 
 from data import Course, ExternalTool, ExternalToolTab, ToolMigration
-from exceptions import InvalidToolIdsException
+from exceptions import ConfigException, InvalidToolIdsException
 from main import main, find_tools_for_migrations
 from manager import API, AccountManager, CourseManager
-from utils import find_entity_by_id
+from utils import convert_csv_to_int_list, find_entity_by_id
 
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class AccountManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
-        self.enrollment_term_id: int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
+        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
 
         self.test_external_tool_tab = ExternalToolTab(
@@ -50,13 +50,29 @@ class AccountManagerTestCase(unittest.TestCase):
             logger.debug(tool)
             self.assertTrue(isinstance(tool, ExternalTool))
 
-    def test_manager_get_courses(self):
+    def test_manager_get_courses_in_single_term(self):
         with self.api.client:
             manager = AccountManager(1, self.api)
-            courses = manager.get_courses_in_account_for_term(self.enrollment_term_id, 100)
+            courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
         self.assertTrue(len(courses) > 0)
+        term_ids: list[int] = []
         for course in courses:
             self.assertTrue(isinstance(course, Course))
+            term_ids.append(course.enrollment_term_id)
+        term_id_set = set(term_ids)
+        self.assertTrue(len(term_id_set) == 1)
+
+    def test_manager_get_courses_in_multiple_term(self):
+        with self.api.client:
+            manager = AccountManager(1, self.api)
+            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
+        self.assertTrue(len(courses) > 0)
+        term_ids: list[int] = []
+        for course in courses:
+            self.assertTrue(isinstance(course, Course))
+            term_ids.append(course.enrollment_term_id)
+        term_id_set = set(term_ids)
+        self.assertTrue(len(term_id_set) > 1)
 
 
 class CourseManagerTestCase(unittest.TestCase):
@@ -64,13 +80,14 @@ class CourseManagerTestCase(unittest.TestCase):
     Integration tests for CourseManager class
     """
 
-    def setUp(self) -> None:
+    def setUp(self):
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
         self.test_course_id: int = int(os.getenv('TEST_COURSE_ID', '0'))
+        self.enrollment_term_id: int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
         self.course_manager = CourseManager(
-            Course(self.test_course_id, name='Test Course'),
+            Course(self.test_course_id, name='Test Course', enrollment_term_id=self.enrollment_term_id),
             self.api
         )
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
@@ -78,11 +95,7 @@ class CourseManagerTestCase(unittest.TestCase):
 
     def test_manager_gets_tool_tabs_in_course(self):
         with self.api.client:
-            manager = CourseManager(
-                Course(self.test_course_id, name='Test Course'),
-                self.api
-            )
-            tabs = manager.get_tool_tabs()
+            tabs = self.course_manager.get_tool_tabs()
         self.assertTrue(len(tabs) > 0)
         for tab in tabs:
             self.assertTrue(isinstance(tab, ExternalToolTab))
@@ -136,6 +149,21 @@ class UtilsTestCase(unittest.TestCase):
         tool = find_entity_by_id(77778, [self.test_external_tool])
         self.assertTrue(tool is None)
 
+    def test_convert_csv_to_int_list_when_valid(self):
+        int_list = convert_csv_to_int_list('6,7,8')
+        for elem in int_list:
+            self.assertIsInstance(elem, int)
+        int_list = convert_csv_to_int_list('6')
+        self.assertIsInstance(int_list[0], int)
+
+    def test_convert_csv_to_int_list_when_invalid(self):
+        with self.assertRaises(ConfigException):
+            convert_csv_to_int_list('6,7,blahblah,8')
+        with self.assertRaises(ConfigException):
+            convert_csv_to_int_list(',')
+        with self.assertRaises(ConfigException):
+            convert_csv_to_int_list('')
+
 
 class MainTestCase(unittest.TestCase):
 
@@ -144,7 +172,7 @@ class MainTestCase(unittest.TestCase):
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
         self.account_id: int = int(os.getenv('ACCOUNT_ID', '0'))
-        self.enrollment_term_id:  int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
+        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
 
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
         self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
@@ -160,7 +188,7 @@ class MainTestCase(unittest.TestCase):
         main(
             self.api,
             self.account_id,
-            self.enrollment_term_id,
+            self.enrollment_term_ids,
             [ToolMigration(source_id=self.source_tool_id, target_id=self.target_tool_id)]
         )
         # what needs to be checked?

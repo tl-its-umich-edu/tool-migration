@@ -8,12 +8,14 @@ class CanvasEntity(ABC):
     name: str
 
 
+@dataclass(frozen=True)
 class ExternalTool(CanvasEntity):
     pass
 
 
+@dataclass(frozen=True)
 class Course(CanvasEntity):
-    pass
+    enrollment_term_id: int
 
 
 @dataclass(frozen=True)

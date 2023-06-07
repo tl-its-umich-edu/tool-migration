@@ -22,15 +22,29 @@ class AccountManager:
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         return tools
 
-    def get_courses_in_account_for_term(self, term_id: int, bail_after: int | None = None) -> list[Course]:
-        results = self.api.get_results_from_pages(
-            f'/accounts/{self.account_id}/courses',
-            params={ 'enrollment_term_id': term_id },
-            page_size=50,
-            bail_after=bail_after
-        )
-        courses = [Course(id=course_dict['id'], name=course_dict['name']) for course_dict in results]
-        logger.info(f'Number of courses found in account {self.account_id}: {len(courses)}')
+    def get_courses_in_terms(self, term_ids: list[int], bail_after: int | None = None) -> list[Course]:
+        limit_per_term = None
+        if bail_after is not None:
+            limit_per_term = bail_after // len(term_ids)
+
+        results: list[dict[str, Any]] = []
+        for term_id in term_ids:
+            term_results = self.api.get_results_from_pages(
+                f'/accounts/{self.account_id}/courses',
+                params={ 'enrollment_term_id': term_id },
+                page_size=50,
+                bail_after=limit_per_term
+            )
+            results += term_results
+        courses = [
+            Course(
+                id=course_dict['id'],
+                name=course_dict['name'],
+                enrollment_term_id=course_dict['enrollment_term_id']
+            )
+            for course_dict in results
+        ]
+        logger.info(f'Number of courses found in account {self.account_id} for terms {term_ids}: {len(courses)}')
         return courses
 
 
