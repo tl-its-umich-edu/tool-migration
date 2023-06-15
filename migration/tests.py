@@ -1,7 +1,8 @@
 import logging
+import json
 import os
 import unittest
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import httpx
 from dotenv import load_dotenv
@@ -27,6 +28,9 @@ class APITestCase(unittest.TestCase):
         self.api = API(self.api_url, api_key)
         self.account_id = int(os.getenv('ACCOUNT_ID', 0))
 
+        self.course_url = '/courses/11111111/'
+        self.course_data = [{"name": "Test Course"}]
+
     def test_get_next_page_params_with_no_next_page(self):
         mock_response = MagicMock(httpx.Response)
         mock_response.links = {
@@ -47,6 +51,45 @@ class APITestCase(unittest.TestCase):
         with self.api.client:
             results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5, limit=2)
         self.assertTrue(len(results) == 2)
+
+    def test_get_retries_on_http_error(self):
+        expected_result = self.course_data
+        request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
+        resp = httpx.Response(
+            status_code=httpx.codes.BAD_GATEWAY,
+            request=request
+        )
+        expected_resp = httpx.Response(
+            status_code=httpx.codes.OK,
+            request=request,
+            text=json.dumps(expected_result)
+        )
+
+        with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
+            mock_get_call.side_effect = [resp, expected_resp]
+            with self.api.client:
+                result = self.api.get(self.course_url)
+        self.assertEqual(mock_get_call.call_count, 2)
+        self.assertEqual(expected_result, result.data)
+
+    def test_get_retries_on_decode_error(self):
+        request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
+        bad_json_resp = httpx.Response(
+            status_code=httpx.codes.OK,
+            request=MagicMock(spec=httpx.Request),
+            text=json.dumps(self.course_data)[:-3],
+        )
+        expected_resp = httpx.Response(
+            status_code=httpx.codes.OK,
+            request=request,
+            text=json.dumps(self.course_data)
+        )
+        with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
+            mock_get_call.side_effect = [bad_json_resp, expected_resp]
+            with self.api.client:
+                result = self.api.get(self.course_url)
+        self.assertEqual(self.course_data, result.data)
+        self.assertEqual(mock_get_call.call_count, 2)
 
 
 class AccountManagerTestCase(unittest.TestCase):
