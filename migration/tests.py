@@ -53,7 +53,6 @@ class APITestCase(unittest.TestCase):
         self.assertTrue(len(results) == 2)
 
     def test_get_retries_on_http_error(self):
-        expected_result = self.course_data
         request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
         resp = httpx.Response(
             status_code=httpx.codes.BAD_GATEWAY,
@@ -62,15 +61,15 @@ class APITestCase(unittest.TestCase):
         expected_resp = httpx.Response(
             status_code=httpx.codes.OK,
             request=request,
-            text=json.dumps(expected_result)
+            text=json.dumps(self.course_data)
         )
 
         with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
             mock_get_call.side_effect = [resp, expected_resp]
             with self.api.client:
                 result = self.api.get(self.course_url)
+        self.assertEqual(self.course_data, result.data)
         self.assertEqual(mock_get_call.call_count, 2)
-        self.assertEqual(expected_result, result.data)
 
     def test_get_retries_on_decode_error(self):
         request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
@@ -90,6 +89,19 @@ class APITestCase(unittest.TestCase):
                 result = self.api.get(self.course_url)
         self.assertEqual(self.course_data, result.data)
         self.assertEqual(mock_get_call.call_count, 2)
+
+    def test_put_retries_until_failure(self):
+        request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
+        bad_resp = httpx.Response(
+            status_code=httpx.codes.BAD_GATEWAY,
+            request=request
+        )
+        with patch.object(self.api.client, 'put', autospec=True) as mock_put_call:
+            mock_put_call.side_effect = [bad_resp, bad_resp, bad_resp, bad_resp]
+            with self.api.client:
+                with self.assertRaises(httpx.HTTPStatusError):
+                    self.api.put(self.course_url, params={ "name": "Test Course!" })
+        self.assertEqual(mock_put_call.call_count, 4)
 
 
 class AccountManagerTestCase(unittest.TestCase):

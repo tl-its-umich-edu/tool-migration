@@ -6,17 +6,18 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx
-from tenacity import retry, stop_after_attempt, RetryCallState, retry_if_exception_type
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt
+)
 
 logger = logging.getLogger(__name__)
 
 
 class EndpointType(Enum):
     REST = '/api/v1/'
-
-
-def log_retry(retry_state: RetryCallState):
-    logger.warning(f'Call attempt {retry_state.attempt_number} failed.')
 
 
 @dataclass
@@ -49,37 +50,25 @@ class API:
         stop=stop_after_attempt(4),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
-        after=log_retry
+        before_sleep=before_sleep_log(logger, logging.WARN)
     )
     def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponseData:
-        try:
-            resp = self.client.get(url=url, params=params)
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            logger.warning(f"HTTP Exception for {exc.request.url} - {exc}")
-            raise exc
-        # Check if decoding the JSON raises an error
-        try:
-            data = resp.json()
-        except JSONDecodeError as exc:
-            logger.warning('JSONDecodeError encountered')
-            raise exc
+        resp = self.client.get(url=url, params=params)
+        resp.raise_for_status()
+        data = resp.json()
         next_page_params = self.get_next_page_params(resp)
         return GetResponseData(data, next_page_params)
 
     @retry(
         stop=stop_after_attempt(4),
-        retry=retry_if_exception_type(httpx.HTTPError),
+        retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
-        after=log_retry
+        before_sleep=before_sleep_log(logger, logging.WARN)
     )
-    def put(self, url: str, params: dict[str, Any] | None = None) -> None:
-        try:
-            resp = self.client.put(url=url, params=params)
-            resp.raise_for_status()
-        except httpx.HTTPError as exc:
-            logger.error(f"HTTP Exception for {exc.request.url} - {exc}")
-            raise exc
+    def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
+        resp = self.client.put(url=url, params=params)
+        resp.raise_for_status()
+        return resp.json()
 
     def get_results_from_pages(
         self, endpoint: str, params: dict[str, Any] | None = None, page_size: int = 50, limit: int | None = None
