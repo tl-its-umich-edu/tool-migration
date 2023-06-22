@@ -112,11 +112,11 @@ class AccountManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
-        self.account_id = int(os.getenv('ACCOUNT_ID', 0))
+        self.account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
 
-    def test_manager_gets_tools(self):
+    def test_manager_get_tools(self):
         with self.api.client:
             manager = AccountManager(self.account_id, self.api)
             tools = manager.get_tools_installed_in_account()
