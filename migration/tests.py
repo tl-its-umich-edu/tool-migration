@@ -112,13 +112,13 @@ class AccountManagerTestCase(unittest.TestCase):
     def setUp(self) -> None:
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
-        self.account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
+        self.test_account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
 
     def test_manager_get_tools(self):
         with self.api.client:
-            manager = AccountManager(self.account_id, self.api)
+            manager = AccountManager(self.test_account_id, self.api)
             tools = manager.get_tools_installed_in_account()
         self.assertTrue(len(tools) > 0)
         for tool in tools:
@@ -127,7 +127,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
     def test_manager_get_courses_in_single_term(self):
         with self.api.client:
-            manager = AccountManager(self.account_id, self.api)
+            manager = AccountManager(self.test_account_id, self.api)
             courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
@@ -139,7 +139,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
     def test_manager_get_courses_in_multiple_terms(self):
         with self.api.client:
-            manager = AccountManager(self.account_id, self.api)
+            manager = AccountManager(self.test_account_id, self.api)
             courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
@@ -151,7 +151,7 @@ class AccountManagerTestCase(unittest.TestCase):
 
     def test_manager_get_courses_with_limit(self):
         with self.api.client:
-            manager = AccountManager(self.account_id, self.api)
+            manager = AccountManager(self.test_account_id, self.api)
             courses = manager.get_courses_in_terms(self.enrollment_term_ids, 50)
         self.assertTrue(len(courses) > 0)
         for course in courses:
