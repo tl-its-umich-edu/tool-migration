@@ -273,6 +273,14 @@ class UtilsTestCase(unittest.TestCase):
         self.assertEqual(chunks, [5, 5, 5, 4, 4])
         chunks = chunk_integer(14, 4)
         self.assertEqual(chunks, [4, 4, 3, 3])
+        chunks = chunk_integer(2, 3)
+        self.assertEqual(chunks, [1, 1, 0])
+        chunks = chunk_integer(0, 3)
+        self.assertEqual(chunks, [0, 0, 0])
+        with self.assertRaises(Exception):
+            chunks = chunk_integer(-1, 2)
+        with self.assertRaises(Exception):
+            chunks = chunk_integer(2, -1)
 
 
 class MainTestCase(unittest.TestCase):
