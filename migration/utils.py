@@ -29,3 +29,20 @@ def convert_csv_to_int_list(csv_string: str) -> list[int]:
         )
         raise exception
     return int_list
+
+
+def chunk_integer(value: int, num_chunks: int) -> list[int]:
+    if value < 0:
+        raise Exception('value parameter for chunk_integer must be zero or a positive integer.')
+    if num_chunks < 1:
+        raise Exception('num_chunks parameter for chunk_integer must be a positive integer.')
+
+    chunks: list[int] = []
+    div_floor = (value // num_chunks)
+    remainder = value % div_floor if div_floor > 0 else value
+    for i in range(num_chunks):
+        if i < remainder:
+            chunks.append(div_floor + 1)
+        else:
+            chunks.append(div_floor)
+    return chunks

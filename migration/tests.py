@@ -1,29 +1,181 @@
 import logging
+import json
 import os
 import unittest
+from unittest.mock import MagicMock, patch
 
+import httpx
 from dotenv import load_dotenv
 
 from data import Course, ExternalTool, ExternalToolTab, ToolMigration
 from exceptions import ConfigException, InvalidToolIdsException
 from main import main, find_tools_for_migrations
 from manager import API, AccountManager, CourseManager
-from utils import convert_csv_to_int_list, find_entity_by_id
+from utils import convert_csv_to_int_list, find_entity_by_id, chunk_integer
 
 
 logger = logging.getLogger(__name__)
 
 
+class APITestCase(unittest.TestCase):
+    """
+    Integration/unit tests for API class
+    """
+
+    def setUp(self) -> None:
+        self.api_url: str = os.getenv('API_URL', '')
+        api_key: str = os.getenv('API_KEY', '')
+        self.api = API(self.api_url, api_key)
+        self.account_id = int(os.getenv('ACCOUNT_ID', 0))
+
+        self.course_url = '/courses/11111111/'
+        self.course_data = [{"name": "Test Course"}]
+
+    def test_get_next_page_params_with_no_next_page(self):
+        mock_response = MagicMock(httpx.Response)
+        mock_response.links = {
+            'next': {
+                'url': f'{self.api_url}/api/v1/accounts/{self.account_id}/courses/?page=2&per_page=5',
+                'rel': 'next'
+            }
+        }
+        params = API.get_next_page_params(mock_response)
+        self.assertEqual(params, {'page': ['2'], 'per_page': ['5']})
+
+    def test_get_results_from_pages(self):
+        with self.api.client:
+            results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5)
+        self.assertTrue(len(results) > 1)
+
+    def test_get_results_from_pages_with_limit(self):
+        with self.api.client:
+            results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5, limit=2)
+        self.assertTrue(len(results) == 2)
+
+    def test_get_retries_on_http_error(self):
+        request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
+        resp = httpx.Response(
+            status_code=httpx.codes.BAD_GATEWAY,
+            request=request
+        )
+        expected_resp = httpx.Response(
+            status_code=httpx.codes.OK,
+            request=request,
+            text=json.dumps(self.course_data)
+        )
+
+        with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
+            mock_get_call.side_effect = [resp, expected_resp]
+            with self.api.client:
+                result = self.api.get(self.course_url)
+        self.assertEqual(self.course_data, result.data)
+        self.assertEqual(mock_get_call.call_count, 2)
+
+    def test_get_retries_on_decode_error(self):
+        request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
+        bad_json_resp = httpx.Response(
+            status_code=httpx.codes.OK,
+            request=MagicMock(spec=httpx.Request),
+            text=json.dumps(self.course_data)[:-3], # Simulate malformed JSON
+        )
+        expected_resp = httpx.Response(
+            status_code=httpx.codes.OK,
+            request=request,
+            text=json.dumps(self.course_data)
+        )
+        with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
+            mock_get_call.side_effect = [bad_json_resp, expected_resp]
+            with self.api.client:
+                result = self.api.get(self.course_url)
+        self.assertEqual(self.course_data, result.data)
+        self.assertEqual(mock_get_call.call_count, 2)
+
+    def test_put_retries_until_failure(self):
+        request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
+        bad_resp = httpx.Response(
+            status_code=httpx.codes.BAD_GATEWAY,
+            request=request
+        )
+        with patch.object(self.api.client, 'put', autospec=True) as mock_put_call:
+            mock_put_call.side_effect = [bad_resp, bad_resp, bad_resp, bad_resp]
+            with self.api.client:
+                with self.assertRaises(httpx.HTTPStatusError):
+                    self.api.put(self.course_url, params={ "name": "Test Course!" })
+        self.assertEqual(mock_put_call.call_count, 4)
+
+
 class AccountManagerTestCase(unittest.TestCase):
     """
-    Integration/unit tests for AccountManager class
+    Integration tests for AccountManager class
     """
 
     def setUp(self) -> None:
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
+        self.test_account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
+
+    def test_manager_get_tools(self):
+        with self.api.client:
+            manager = AccountManager(self.test_account_id, self.api)
+            tools = manager.get_tools_installed_in_account()
+        self.assertTrue(len(tools) > 0)
+        for tool in tools:
+            logger.debug(tool)
+            self.assertTrue(isinstance(tool, ExternalTool))
+
+    def test_manager_get_courses_in_single_term(self):
+        with self.api.client:
+            manager = AccountManager(self.test_account_id, self.api)
+            courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
+        self.assertTrue(len(courses) > 0)
+        term_ids: list[int] = []
+        for course in courses:
+            self.assertTrue(isinstance(course, Course))
+            term_ids.append(course.enrollment_term_id)
+        term_id_set = set(term_ids)
+        self.assertTrue(len(term_id_set) == 1)
+
+    def test_manager_get_courses_in_multiple_terms(self):
+        with self.api.client:
+            manager = AccountManager(self.test_account_id, self.api)
+            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
+        self.assertTrue(len(courses) > 0)
+        term_ids: list[int] = []
+        for course in courses:
+            self.assertTrue(isinstance(course, Course))
+            term_ids.append(course.enrollment_term_id)
+        term_id_set = set(term_ids)
+        self.assertTrue(len(term_id_set) > 1)
+
+    def test_manager_get_courses_with_limit(self):
+        with self.api.client:
+            manager = AccountManager(self.test_account_id, self.api)
+            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 50)
+        self.assertTrue(len(courses) > 0)
+        for course in courses:
+            self.assertTrue(isinstance(course, Course))
+        self.assertTrue(len(courses) <= 50)
+
+
+class CourseManagerTestCase(unittest.TestCase):
+    """
+    Integration/unit tests for CourseManager class
+    """
+
+    def setUp(self):
+        api_url: str = os.getenv('API_URL', '')
+        api_key: str = os.getenv('API_KEY', '')
+        self.api = API(api_url, api_key)
+        self.test_course_id: int = int(os.getenv('TEST_COURSE_ID', '0'))
+        self.enrollment_term_id: int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
+        self.course_manager = CourseManager(
+            Course(self.test_course_id, name='Test Course', enrollment_term_id=self.enrollment_term_id),
+            self.api
+        )
+        self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
+        self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
 
         self.test_external_tool_tab = ExternalToolTab(
             id='context_external_tool_99999',
@@ -40,58 +192,6 @@ class AccountManagerTestCase(unittest.TestCase):
     def test_find_tab_by_tool_id_returns_none(self):
         tab = CourseManager.find_tab_by_tool_id(100000, [self.test_external_tool_tab])
         self.assertTrue(tab is None)
-
-    def test_manager_gets_tools(self):
-        with self.api.client:
-            manager = AccountManager(1, self.api)
-            tools = manager.get_tools_installed_in_account()
-        self.assertTrue(len(tools) > 0)
-        for tool in tools:
-            logger.debug(tool)
-            self.assertTrue(isinstance(tool, ExternalTool))
-
-    def test_manager_get_courses_in_single_term(self):
-        with self.api.client:
-            manager = AccountManager(1, self.api)
-            courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
-        self.assertTrue(len(courses) > 0)
-        term_ids: list[int] = []
-        for course in courses:
-            self.assertTrue(isinstance(course, Course))
-            term_ids.append(course.enrollment_term_id)
-        term_id_set = set(term_ids)
-        self.assertTrue(len(term_id_set) == 1)
-
-    def test_manager_get_courses_in_multiple_term(self):
-        with self.api.client:
-            manager = AccountManager(1, self.api)
-            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 150)
-        self.assertTrue(len(courses) > 0)
-        term_ids: list[int] = []
-        for course in courses:
-            self.assertTrue(isinstance(course, Course))
-            term_ids.append(course.enrollment_term_id)
-        term_id_set = set(term_ids)
-        self.assertTrue(len(term_id_set) > 1)
-
-
-class CourseManagerTestCase(unittest.TestCase):
-    """
-    Integration tests for CourseManager class
-    """
-
-    def setUp(self):
-        api_url: str = os.getenv('API_URL', '')
-        api_key: str = os.getenv('API_KEY', '')
-        self.api = API(api_url, api_key)
-        self.test_course_id: int = int(os.getenv('TEST_COURSE_ID', '0'))
-        self.enrollment_term_id: int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
-        self.course_manager = CourseManager(
-            Course(self.test_course_id, name='Test Course', enrollment_term_id=self.enrollment_term_id),
-            self.api
-        )
-        self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
-        self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
 
     def test_manager_gets_tool_tabs_in_course(self):
         with self.api.client:
@@ -163,6 +263,24 @@ class UtilsTestCase(unittest.TestCase):
             convert_csv_to_int_list(',')
         with self.assertRaises(ConfigException):
             convert_csv_to_int_list('')
+
+    def test_chunk_integer(self):
+        chunks = chunk_integer(150, 3)
+        self.assertEqual(chunks, [50, 50, 50])
+        chunks = chunk_integer(5, 2)
+        self.assertEqual(chunks, [3, 2])
+        chunks = chunk_integer(23, 5)
+        self.assertEqual(chunks, [5, 5, 5, 4, 4])
+        chunks = chunk_integer(14, 4)
+        self.assertEqual(chunks, [4, 4, 3, 3])
+        chunks = chunk_integer(2, 3)
+        self.assertEqual(chunks, [1, 1, 0])
+        chunks = chunk_integer(0, 3)
+        self.assertEqual(chunks, [0, 0, 0])
+        with self.assertRaises(Exception):
+            chunks = chunk_integer(-1, 2)
+        with self.assertRaises(Exception):
+            chunks = chunk_integer(2, -1)
 
 
 class MainTestCase(unittest.TestCase):

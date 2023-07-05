@@ -2,10 +2,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
-
 from api import API
 from data import Course, ExternalTool, ExternalToolTab
+from utils import chunk_integer
 
 
 logger = logging.getLogger(__name__)
@@ -22,18 +21,19 @@ class AccountManager:
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         return tools
 
-    def get_courses_in_terms(self, term_ids: list[int], bail_after: int | None = None) -> list[Course]:
-        limit_per_term = None
-        if bail_after is not None:
-            limit_per_term = bail_after // len(term_ids)
+    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
+        limit_chunks = None
+        if limit is not None:
+            limit_chunks = chunk_integer(limit, len(term_ids))
 
         results: list[dict[str, Any]] = []
-        for term_id in term_ids:
+        for i, term_id in enumerate(term_ids):
+            limit_for_term = limit_chunks[i] if limit_chunks is not None else None
             term_results = self.api.get_results_from_pages(
                 f'/accounts/{self.account_id}/courses',
                 params={ 'enrollment_term_id': term_id },
                 page_size=50,
-                bail_after=limit_per_term
+                limit=limit_for_term
             )
             results += term_results
         courses = [
@@ -73,13 +73,7 @@ class CourseManager:
         )
 
     def get_tool_tabs(self) -> list[ExternalToolTab]:
-        try:
-            resp = self.api.client.get(f'/courses/{self.course.id}/tabs')
-            resp.raise_for_status()
-        except httpx.HTTPError as e:
-            logger.error(f"HTTP Exception for {e.request.url} - {e}")
-            raise e
-        results: list[dict[str, Any]] = resp.json()
+        results = self.api.get_results_from_pages(f'/courses/{self.course.id}/tabs')
         
         tabs: list[ExternalToolTab] = []
         for result in results:
@@ -93,16 +87,10 @@ class CourseManager:
         if position is not None:
             params.update({ "position": position })
 
-        try:
-            resp = self.api.client.put(
-                f'/courses/{self.course.id}/tabs/{tab.id}',
-                params=params
-            )
-            resp.raise_for_status()
-        except httpx.HTTPError as e:
-            logger.error(f"HTTP Exception for {e.request.url} - {e}")
-            raise e
-        result = resp.json()
+        result = self.api.put(
+            f'/courses/{self.course.id}/tabs/{tab.id}',
+            params=params
+        )
         logger.debug(result)
         return CourseManager.convert_data_to_tool_tab(result)
 
