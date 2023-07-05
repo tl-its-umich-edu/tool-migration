@@ -28,7 +28,7 @@ class AccountManager:
 
         results: list[dict[str, Any]] = []
         for i, term_id in enumerate(term_ids):
-            limit_for_term = limit_chunks[i] if limit_chunks else None
+            limit_for_term = limit_chunks[i] if limit_chunks is not None else None
             term_results = self.api.get_results_from_pages(
                 f'/accounts/{self.account_id}/courses',
                 params={ 'enrollment_term_id': term_id },

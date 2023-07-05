@@ -13,7 +13,10 @@ from tenacity import (
     stop_after_attempt
 )
 
+
 logger = logging.getLogger(__name__)
+
+MAX_ATTEMPT_NUM = 4
 
 
 class EndpointType(Enum):
@@ -21,7 +24,7 @@ class EndpointType(Enum):
 
 
 @dataclass
-class GetResponseData:
+class GetResponse:
     data: Any
     next_page_params: dict[str, Any] | None
 
@@ -32,7 +35,8 @@ class API:
     def __init__(
         self,
         url: str,
-        key: str, endpoint_type: EndpointType = EndpointType.REST,
+        key: str,
+        endpoint_type: EndpointType = EndpointType.REST,
         timeout: int = 10
     ):
         headers = { 'Authorization': f'Bearer {key}' }
@@ -47,20 +51,20 @@ class API:
             return query_params
 
     @retry(
-        stop=stop_after_attempt(4),
+        stop=stop_after_attempt(MAX_ATTEMPT_NUM),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
         before_sleep=before_sleep_log(logger, logging.WARN)
     )
-    def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponseData:
+    def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
         resp = self.client.get(url=url, params=params)
         resp.raise_for_status()
         data = resp.json()
         next_page_params = self.get_next_page_params(resp)
-        return GetResponseData(data, next_page_params)
+        return GetResponse(data, next_page_params)
 
     @retry(
-        stop=stop_after_attempt(4),
+        stop=stop_after_attempt(MAX_ATTEMPT_NUM),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
         before_sleep=before_sleep_log(logger, logging.WARN)
@@ -86,14 +90,14 @@ class API:
 
         while more_pages:
             logger.debug(f'Params: {extra_params}')
-            data = self.get(url=endpoint, params=extra_params)
-            results += data.data
-            if data.next_page_params is None:
+            get_resp = self.get(url=endpoint, params=extra_params)
+            results += get_resp.data
+            if get_resp.next_page_params is None:
                 more_pages = False
             elif limit is not None and limit <= len(results):
                 more_pages = False
             else:
-                extra_params.update(data.next_page_params)
+                extra_params.update(get_resp.next_page_params)
                 page_num += 1
 
         # if limit is specified, slice off data if there is more than the limit
