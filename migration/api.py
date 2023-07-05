@@ -39,7 +39,7 @@ class API:
         endpoint_type: EndpointType = EndpointType.REST,
         timeout: int = 10
     ):
-        headers = { 'Authorization': f'Bearer {key}' }
+        headers = {'Authorization': f'Bearer {key}'}
         self.client = httpx.Client(base_url=url + endpoint_type.value, headers=headers, timeout=timeout)
 
     @staticmethod

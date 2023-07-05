@@ -40,7 +40,7 @@ class APITestCase(unittest.TestCase):
             }
         }
         params = API.get_next_page_params(mock_response)
-        self.assertEqual(params, { 'page': ['2'], 'per_page': ['5'] })
+        self.assertEqual(params, {'page': ['2'], 'per_page': ['5']})
 
     def test_get_results_from_pages(self):
         with self.api.client:
@@ -76,7 +76,7 @@ class APITestCase(unittest.TestCase):
         bad_json_resp = httpx.Response(
             status_code=httpx.codes.OK,
             request=MagicMock(spec=httpx.Request),
-            text=json.dumps(self.course_data)[:-3],
+            text=json.dumps(self.course_data)[:-3], # Simulate malformed JSON
         )
         expected_resp = httpx.Response(
             status_code=httpx.codes.OK,
