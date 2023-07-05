@@ -1,6 +1,8 @@
 import logging
 import json
 import os
+import re
+import time
 import unittest
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +14,7 @@ from db import DB, DBParams, Dialect
 from exceptions import ConfigException, InvalidToolIdsException
 from main import main, find_tools_for_migrations
 from manager import API, AccountManager, CourseManager, WarehouseAccountManager
-from utils import convert_csv_to_int_list, find_entity_by_id, chunk_integer
+from utils import convert_csv_to_int_list, chunk_integer, find_entity_by_id, time_execution
 
 
 logger = logging.getLogger(__name__)
@@ -117,7 +119,7 @@ class AccountManagerTestCase(unittest.TestCase):
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
 
-    def test_manager_gets_tools(self):
+    def test_manager_get_tools(self):
         with self.api.client:
             manager = AccountManager(self.test_account_id, self.api)
             tools = manager.get_tools_installed_in_account()
@@ -346,6 +348,15 @@ class UtilsTestCase(unittest.TestCase):
             chunks = chunk_integer(-1, 2)
         with self.assertRaises(Exception):
             chunks = chunk_integer(2, -1)
+
+    def test_time_execution(self):
+        @time_execution
+        def sleep(duration: int):
+            time.sleep(duration)
+        with self.assertLogs('utils', logging.INFO) as cm:
+            sleep(4)
+        logger.info(cm.output)
+        self.assertRegex(cm.output[0], re.compile(r'sleep took \d+\.\d+ seconds to complete\.'))
 
 
 class MainTestCase(unittest.TestCase):

@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import sqlalchemy
@@ -8,13 +8,13 @@ import sqlalchemy
 from api import API
 from data import Course, ExternalTool, ExternalToolTab
 from db import DB
-from utils import chunk_integer
+from utils import chunk_integer, time_execution
 
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass
 class AccountManagerBase(ABC):
     account_id: int
 
@@ -27,7 +27,7 @@ class AccountManagerBase(ABC):
         pass
 
 
-@dataclass(frozen=True)
+@dataclass
 class AccountManager(AccountManagerBase):
     api: API
 
@@ -37,6 +37,7 @@ class AccountManager(AccountManagerBase):
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         return tools
 
+    @time_execution
     def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
         limit_chunks = None
         if limit is not None:
@@ -64,16 +65,17 @@ class AccountManager(AccountManagerBase):
         return courses
 
 
-@dataclass(frozen=True)
+@dataclass
 class WarehouseAccountManager(AccountManagerBase):
     db: DB
     api: API
+    account_manager: AccountManager = field(init=False)
+
+    def __post_init__(self):
+        self.account_manager = AccountManager(self.account_id, self.api)
 
     def get_tools_installed_in_account(self) -> list[ExternalTool]:
-        params = {"include_parents": True}
-        results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/external_tools', params)
-        tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
-        return tools
+        return self.account_manager.get_tools_installed_in_account()
 
     def get_subaccount_ids(self) -> list[int]:
         results = self.api.get_results_from_pages(
@@ -83,6 +85,7 @@ class WarehouseAccountManager(AccountManagerBase):
         logger.debug(sub_account_ids)
         return sub_account_ids
 
+    @time_execution
     def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
         account_ids = [self.account_id] + self.get_subaccount_ids()
 
