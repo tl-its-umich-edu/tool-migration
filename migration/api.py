@@ -96,6 +96,7 @@ class API:
                 extra_params.update(data.next_page_params)
                 page_num += 1
 
+        # if limit is specified, slice off data if there is more than the limit
         if limit is not None and len(results) > limit:
             results = results[:limit]
 
