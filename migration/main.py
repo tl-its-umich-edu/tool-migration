@@ -9,7 +9,7 @@ from data import ExternalTool, ToolMigration
 from db import DB, Dialect
 from exceptions import InvalidToolIdsException
 from manager import AccountManagerFactory, CourseManager
-from utils import convert_csv_to_int_list, find_entity_by_id
+from utils import convert_csv_to_int_list, find_entity_by_id, time_execution
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,7 @@ def find_tools_for_migrations(
     return tool_pairs
 
 
+@time_execution
 def main(api: API, account_id: int, term_ids: list[int], migrations: list[ToolMigration], db: DB | None = None):
     
     factory = AccountManagerFactory()
