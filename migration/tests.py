@@ -236,11 +236,12 @@ class CourseManagerTestCase(unittest.TestCase):
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
         self.test_course_id: int = int(os.getenv('TEST_COURSE_ID', '0'))
-        self.enrollment_term_id: int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
-        self.course_manager = CourseManager(
-            Course(self.test_course_id, name='Test Course', enrollment_term_id=self.enrollment_term_id),
-            self.api
+        course = Course(
+            self.test_course_id,
+            name='Test Course',
+            enrollment_term_id=0  # Just faking this, it won't be used
         )
+        self.course_manager = CourseManager(course, self.api)
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
         self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
 
@@ -253,10 +254,7 @@ class CourseManagerTestCase(unittest.TestCase):
         )
 
         setup_api = API(api_url, api_key)
-        setup_course_manager = CourseManager(
-            Course(self.test_course_id, name='Test Course', enrollment_term_id=self.enrollment_term_id),
-            setup_api
-        )
+        setup_course_manager = CourseManager(course, setup_api)
         with setup_api.client:
             tabs_before = setup_course_manager.get_tool_tabs()
             source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs_before)
