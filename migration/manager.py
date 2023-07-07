@@ -115,10 +115,8 @@ class WarehouseAccountManager(AccountManagerBase):
         results = conn.execute(statement).all()
 
         courses = []
-        course_dicts = []
         for result in results:
             result_dict = result._asdict()
-            course_dicts.append(result_dict)
             courses.append(Course(
                 id=int(result_dict['course_id']),
                 name=result_dict['course_name'],
