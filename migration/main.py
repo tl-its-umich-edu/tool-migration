@@ -114,6 +114,8 @@ if __name__ == '__main__':
                 'password': wh_password
             }
         )
+    else:
+        logger.info('Warehouse connection is not configured, so falling back to only using the Canvas API...')
 
     source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
     target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
