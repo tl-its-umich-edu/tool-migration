@@ -44,11 +44,13 @@ def main(api: API, account_id: int, term_ids: list[int], migrations: list[ToolMi
 
     with api.client, db if db is not None else nullcontext():  # type: ignore
         tools = account_manager.get_tools_installed_in_account()
+        logger.info(f'Number of tools found in account {account_id}: {len(tools)}')
+
         tool_pairs = find_tools_for_migrations(tools, migrations)
 
         # get list of tools available in account
         courses = account_manager.get_courses_in_terms(term_ids)
-        logger.info(f'Number of tools found in account {account_id}: {len(tools)}')
+        logger.info(f'Number of courses found in account {account_id} for terms {term_ids}: {len(courses)}')
 
         for source_tool, target_tool in tool_pairs:
             logger.info(f'Source tool: {source_tool}')

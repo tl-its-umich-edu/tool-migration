@@ -61,7 +61,6 @@ class AccountManager(AccountManagerBase):
             )
             for course_dict in results
         ]
-        logger.info(f'Number of courses found in account {self.account_id} for terms {term_ids}: {len(courses)}')
         return courses
 
 
@@ -122,7 +121,6 @@ class WarehouseAccountManager(AccountManagerBase):
                 name=result_dict['course_name'],
                 enrollment_term_id=int(result_dict['term_id'])
             ))
-        logger.info(f'Number of courses found in account {self.account_id} for terms {term_ids}: {len(courses)}')
         return courses
 
 
