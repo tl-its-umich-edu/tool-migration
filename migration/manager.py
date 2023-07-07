@@ -171,18 +171,26 @@ class CourseManager:
         return CourseManager.convert_data_to_tool_tab(result)
 
     def replace_tool_tab(self, source_tab: ExternalToolTab, target_tab: ExternalToolTab) -> None:
-        target_tab_params: dict[str, Any] = {"hidden": False}
-        if not source_tab.is_hidden:
-            target_tab_params.update({"position": source_tab.position})
+        logger.debug([source_tab, target_tab])
 
-        if not source_tab.is_hidden:
-            target_position = source_tab.position
+        # Source tool is hidden in course, don't do anything
+        if source_tab.is_hidden:
+            logger.info(f'Skipping replacement for {[source_tab, target_tab]}; source tool is hidden.')
         else:
-            target_position = None
+            if not target_tab.is_hidden:
+                logger.warn(
+                    f'Both tools ({[source_tab, target_tab]}) are currently available. ' +
+                    'Rolling back will hide the target tool!'
+                )
+                logger.info((f'Skipping update for {target_tab}; tool is already available.'))
+            else:
+                target_position = source_tab.position
+                new_target_tab = self.update_tool_tab(tab=target_tab, is_hidden=False, position=target_position)
+                logger.info(f"Made available target tool in course's navigation: {new_target_tab}")
 
-        new_target_tab = self.update_tool_tab(tab=target_tab, is_hidden=False, position=target_position)
-        new_source_tab = self.update_tool_tab(tab=source_tab, is_hidden=True)
-        logger.info(f"Successfully replaced tool in course's navigation: {[new_source_tab, new_target_tab]}")
+            # Always hide the source tool if it's available
+            new_source_tab = self.update_tool_tab(tab=source_tab, is_hidden=True)
+            logger.info(f"Hid source tool in course's navigation: {new_source_tab}")
         return
 
 
