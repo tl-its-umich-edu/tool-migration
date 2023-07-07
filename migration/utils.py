@@ -1,5 +1,7 @@
+import functools
 import logging
-from typing import TypeVar
+import time
+from typing import Callable, TypeVar
 
 from data import CanvasEntity
 from exceptions import ConfigException
@@ -46,3 +48,15 @@ def chunk_integer(value: int, num_chunks: int) -> list[int]:
         else:
             chunks.append(div_floor)
     return chunks
+
+
+def time_execution(callable: Callable) -> Callable:
+    @functools.wraps(callable)
+    def wrapper(*args, **kwargs):
+        start = time.time()
+        result = callable(*args, **kwargs)
+        end = time.time()
+        delta = end - start
+        logger.info(f'{callable.__qualname__} took {delta} seconds to complete.')
+        return result
+    return wrapper

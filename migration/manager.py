@@ -1,18 +1,34 @@
 import logging
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from typing import Any
+
+import sqlalchemy
 
 from api import API
 from data import Course, ExternalTool, ExternalToolTab
-from utils import chunk_integer
+from db import DB
+from utils import chunk_integer, time_execution
 
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
-class AccountManager:
+@dataclass
+class AccountManagerBase(ABC):
     account_id: int
+
+    @abstractmethod
+    def get_tools_installed_in_account(self) -> list[ExternalTool]:
+        pass
+
+    @abstractmethod
+    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
+        pass
+
+
+@dataclass
+class AccountManager(AccountManagerBase):
     api: API
 
     def get_tools_installed_in_account(self) -> list[ExternalTool]:
@@ -21,6 +37,7 @@ class AccountManager:
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         return tools
 
+    @time_execution
     def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
         limit_chunks = None
         if limit is not None:
@@ -44,7 +61,66 @@ class AccountManager:
             )
             for course_dict in results
         ]
-        logger.info(f'Number of courses found in account {self.account_id} for terms {term_ids}: {len(courses)}')
+        return courses
+
+
+@dataclass
+class WarehouseAccountManager(AccountManagerBase):
+    db: DB
+    api: API
+    account_manager: AccountManager = field(init=False)
+
+    def __post_init__(self):
+        self.account_manager = AccountManager(self.account_id, self.api)
+
+    def get_tools_installed_in_account(self) -> list[ExternalTool]:
+        return self.account_manager.get_tools_installed_in_account()
+
+    def get_subaccount_ids(self) -> list[int]:
+        results = self.api.get_results_from_pages(
+            f'/accounts/{self.account_id}/sub_accounts', { 'recursive': True }
+        )
+        sub_account_ids = [result['id'] for result in results]
+        logger.debug(sub_account_ids)
+        return sub_account_ids
+
+    @time_execution
+    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
+        account_ids = [self.account_id] + self.get_subaccount_ids()
+
+        conn = self.db.get_connection()
+        statement = sqlalchemy.text(f'''
+            select c.canvas_id as "course_id",
+                c."name" as "course_name",
+                t.canvas_id as "term_id"
+            from course_dim c
+            left join enrollment_term_dim t
+                on c.enrollment_term_id=t.id
+            left join account_dim a
+                on c.account_id=a.id
+            where t.canvas_id in :term_ids
+                and a.canvas_id in :account_ids
+                and c.workflow_state != 'deleted'
+            {"limit :result_limit" if limit is not None else ''};
+        ''')
+        extra_bind_params = {}
+        if limit is not None:
+            extra_bind_params['result_limit'] = limit
+        statement = statement.bindparams(
+            sqlalchemy.bindparam('term_ids', value=term_ids, expanding=True),
+            sqlalchemy.bindparam('account_ids', value=account_ids, expanding=True),
+            **extra_bind_params
+        )
+        results = conn.execute(statement).all()
+
+        courses = []
+        for result in results:
+            result_dict = result._asdict()
+            courses.append(Course(
+                id=int(result_dict['course_id']),
+                name=result_dict['course_name'],
+                enrollment_term_id=int(result_dict['term_id'])
+            ))
         return courses
 
 
@@ -108,3 +184,12 @@ class CourseManager:
         new_source_tab = self.update_tool_tab(tab=source_tab, is_hidden=True)
         logger.info(f"Successfully replaced tool in course's navigation: {[new_source_tab, new_target_tab]}")
         return
+
+
+class AccountManagerFactory:
+
+    def get_manager(self, account_id: int, api: API, db: DB | None) -> AccountManagerBase:
+        if db is not None:
+            return WarehouseAccountManager(account_id, db, api)
+        else:
+            return AccountManager(account_id, api)
