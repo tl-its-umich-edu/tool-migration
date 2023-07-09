@@ -30,7 +30,7 @@ class GetResponse:
 
 
 class API:
-    client: httpx.Client
+    client: httpx.AsyncClient
 
     def __init__(
         self,
@@ -40,7 +40,7 @@ class API:
         timeout: int = 10
     ):
         headers = {'Authorization': f'Bearer {key}'}
-        self.client = httpx.Client(base_url=url + endpoint_type.value, headers=headers, timeout=timeout)
+        self.client = httpx.AsyncClient(base_url=url + endpoint_type.value, headers=headers, timeout=timeout)
 
     @staticmethod
     def get_next_page_params(resp: httpx.Response) -> dict[str, Any] | None:
@@ -56,8 +56,8 @@ class API:
         reraise=True,
         before_sleep=before_sleep_log(logger, logging.WARN)
     )
-    def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
-        resp = self.client.get(url=url, params=params)
+    async def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
+        resp = await self.client.get(url=url, params=params)
         resp.raise_for_status()
         data = resp.json()
         next_page_params = self.get_next_page_params(resp)
@@ -69,12 +69,12 @@ class API:
         reraise=True,
         before_sleep=before_sleep_log(logger, logging.WARN)
     )
-    def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
-        resp = self.client.put(url=url, params=params)
+    async def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
+        resp = await self.client.put(url=url, params=params)
         resp.raise_for_status()
         return resp.json()
 
-    def get_results_from_pages(
+    async def get_results_from_pages(
         self, endpoint: str, params: dict[str, Any] | None = None, page_size: int = 50, limit: int | None = None
     ) -> list[dict[str, Any]]:
         extra_params: dict[str, Any]
@@ -90,7 +90,7 @@ class API:
 
         while more_pages:
             logger.debug(f'Params: {extra_params}')
-            get_resp = self.get(url=endpoint, params=extra_params)
+            get_resp = await self.get(url=endpoint, params=extra_params)
             results += get_resp.data
             if get_resp.next_page_params is None:
                 more_pages = False

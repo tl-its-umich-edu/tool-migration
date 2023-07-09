@@ -2,10 +2,11 @@ import logging
 import os
 from contextlib import nullcontext
 
+import trio
 from dotenv import load_dotenv
 
 from api import API
-from data import ExternalTool, ToolMigration
+from data import Course, ExternalTool, ToolMigration
 from db import DB, Dialect
 from exceptions import InvalidToolIdsException
 from manager import AccountManagerFactory, CourseManager
@@ -36,38 +37,47 @@ def find_tools_for_migrations(
     return tool_pairs
 
 
+async def migrate_tool_for_course(api: API, course: Course, source_tool: ExternalTool, target_tool: ExternalTool):
+    course_manager = CourseManager(course, api)
+    tabs = await course_manager.get_tool_tabs()
+    source_tool_tab = CourseManager.find_tab_by_tool_id(source_tool.id, tabs)
+    target_tool_tab = CourseManager.find_tab_by_tool_id(target_tool.id, tabs)
+    if source_tool_tab is None or target_tool_tab is None:
+        raise InvalidToolIdsException(
+            'One or both of the following tool IDs are not available in this course: ' +
+            str([source_tool.id, target_tool.id])
+        )
+    await course_manager.replace_tool_tab(source_tool_tab, target_tool_tab)
+
+
 @time_execution
-def main(api: API, account_id: int, term_ids: list[int], migrations: list[ToolMigration], db: DB | None = None):
-    
+async def main(api: API, account_id: int, term_ids: list[int], migrations: list[ToolMigration], db: DB | None = None):
     factory = AccountManagerFactory()
     account_manager = factory.get_manager(account_id, api, db)
 
-    with api.client, db if db is not None else nullcontext():  # type: ignore
-        tools = account_manager.get_tools_installed_in_account()
-        logger.info(f'Number of tools found in account {account_id}: {len(tools)}')
+    async with api.client:
+        with db if db is not None else nullcontext():  # type: ignore
+            tools = await account_manager.get_tools_installed_in_account()
+            logger.info(f'Number of tools found in account {account_id}: {len(tools)}')
 
-        tool_pairs = find_tools_for_migrations(tools, migrations)
+            tool_pairs = find_tools_for_migrations(tools, migrations)
 
-        # get list of tools available in account
-        courses = account_manager.get_courses_in_terms(term_ids)
-        logger.info(f'Number of courses found in account {account_id} for terms {term_ids}: {len(courses)}')
+            # get list of tools available in account
+            courses = await account_manager.get_courses_in_terms(term_ids)
+            logger.info(f'Number of courses found in account {account_id} for terms {term_ids}: {len(courses)}')
 
-        for source_tool, target_tool in tool_pairs:
-            logger.info(f'Source tool: {source_tool}')
-            logger.info(f'Target tool: {target_tool}')
-
-            for course in courses:
-                # Replace target tool with source tool in course navigation
-                course_manager = CourseManager(course, api)
-                tabs = course_manager.get_tool_tabs()
-                source_tool_tab = CourseManager.find_tab_by_tool_id(source_tool.id, tabs)
-                target_tool_tab = CourseManager.find_tab_by_tool_id(target_tool.id, tabs)
-                if source_tool_tab is None or target_tool_tab is None:
-                    raise InvalidToolIdsException(
-                        'One or both of the following tool IDs are not available in this course: ' + 
-                        str([source_tool.id, target_tool.id])
-                    )
-                course_manager.replace_tool_tab(source_tool_tab, target_tool_tab)
+            for source_tool, target_tool in tool_pairs:
+                logger.info(f'Source tool: {source_tool}')
+                logger.info(f'Target tool: {target_tool}')
+                async with trio.open_nursery() as nursery:
+                    for course in courses:
+                        nursery.start_soon(
+                            migrate_tool_for_course,
+                            api,
+                            course,
+                            source_tool,
+                            target_tool
+                        )
 
 
 if __name__ == '__main__':
@@ -122,7 +132,8 @@ if __name__ == '__main__':
     source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
     target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
 
-    main(
+    trio.run(
+        main,
         API(api_url, api_key),
         account_id,
         enrollment_term_ids,

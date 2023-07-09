@@ -52,9 +52,9 @@ def chunk_integer(value: int, num_chunks: int) -> list[int]:
 
 def time_execution(callable: Callable) -> Callable:
     @functools.wraps(callable)
-    def wrapper(*args, **kwargs):
+    async def wrapper(*args, **kwargs):
         start = time.time()
-        result = callable(*args, **kwargs)
+        result = await callable(*args, **kwargs)
         end = time.time()
         delta = end - start
         logger.info(f'{callable.__qualname__} took {delta} seconds to complete.')
