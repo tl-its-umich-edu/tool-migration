@@ -454,4 +454,7 @@ if __name__ == '__main__':
     httpcore_level = logging.getLogger('httpcore')
     httpcore_level.setLevel(http_log_level)
 
+    asyncio_logger = logging.getLogger('asyncio')
+    asyncio_logger.setLevel(logging.ERROR)
+
     unittest.main()

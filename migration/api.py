@@ -12,11 +12,13 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt
 )
+import trio
 
 
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPT_NUM = 4
+MAX_ASYNC_CONNS = 20
 
 
 class EndpointType(Enum):
@@ -40,7 +42,13 @@ class API:
         timeout: int = 10
     ):
         headers = {'Authorization': f'Bearer {key}'}
-        self.client = httpx.AsyncClient(base_url=url + endpoint_type.value, headers=headers, timeout=timeout)
+        limits = httpx.Limits(max_connections=MAX_ASYNC_CONNS)
+        self.client = httpx.AsyncClient(
+            base_url=url + endpoint_type.value,
+            headers=headers,
+            timeout=timeout,
+            limits=limits
+        )
 
     @staticmethod
     def get_next_page_params(resp: httpx.Response) -> dict[str, Any] | None:
@@ -54,7 +62,8 @@ class API:
         stop=stop_after_attempt(MAX_ATTEMPT_NUM),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
-        before_sleep=before_sleep_log(logger, logging.WARN)
+        before_sleep=before_sleep_log(logger, logging.WARN),
+        sleep=trio.sleep
     )
     async def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
         resp = await self.client.get(url=url, params=params)
@@ -67,7 +76,8 @@ class API:
         stop=stop_after_attempt(MAX_ATTEMPT_NUM),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
-        before_sleep=before_sleep_log(logger, logging.WARN)
+        before_sleep=before_sleep_log(logger, logging.WARN),
+        sleep=trio.sleep
     )
     async def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
         resp = await self.client.put(url=url, params=params)
