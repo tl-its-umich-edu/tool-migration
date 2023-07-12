@@ -38,7 +38,6 @@ def find_tools_for_migrations(
 
 
 async def migrate_tool_for_course(api: API, course: Course, source_tool: ExternalTool, target_tool: ExternalTool):
-    logger.info(course)
     course_manager = CourseManager(course, api)
     tabs = await course_manager.get_tool_tabs()
     source_tool_tab = CourseManager.find_tab_by_tool_id(source_tool.id, tabs)
@@ -49,7 +48,6 @@ async def migrate_tool_for_course(api: API, course: Course, source_tool: Externa
             str([source_tool.id, target_tool.id])
         )
     await course_manager.replace_tool_tab(source_tool_tab, target_tool_tab)
-    logger.info('- - -')
 
 
 @time_execution
