@@ -12,11 +12,13 @@ from tenacity import (
     retry_if_exception_type,
     stop_after_attempt
 )
+import trio
 
 
 logger = logging.getLogger(__name__)
 
 MAX_ATTEMPT_NUM = 4
+MAX_ASYNC_CONNS = 20
 
 
 class EndpointType(Enum):
@@ -30,7 +32,7 @@ class GetResponse:
 
 
 class API:
-    client: httpx.Client
+    client: httpx.AsyncClient
 
     def __init__(
         self,
@@ -40,7 +42,13 @@ class API:
         timeout: int = 10
     ):
         headers = {'Authorization': f'Bearer {key}'}
-        self.client = httpx.Client(base_url=url + endpoint_type.value, headers=headers, timeout=timeout)
+        limits = httpx.Limits(max_connections=MAX_ASYNC_CONNS)
+        self.client = httpx.AsyncClient(
+            base_url=url + endpoint_type.value,
+            headers=headers,
+            timeout=timeout,
+            limits=limits
+        )
 
     @staticmethod
     def get_next_page_params(resp: httpx.Response) -> dict[str, Any] | None:
@@ -54,10 +62,11 @@ class API:
         stop=stop_after_attempt(MAX_ATTEMPT_NUM),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
-        before_sleep=before_sleep_log(logger, logging.WARN)
+        before_sleep=before_sleep_log(logger, logging.WARN),
+        sleep=trio.sleep
     )
-    def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
-        resp = self.client.get(url=url, params=params)
+    async def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
+        resp = await self.client.get(url=url, params=params)
         resp.raise_for_status()
         data = resp.json()
         next_page_params = self.get_next_page_params(resp)
@@ -67,14 +76,15 @@ class API:
         stop=stop_after_attempt(MAX_ATTEMPT_NUM),
         retry=retry_if_exception_type((httpx.HTTPError, JSONDecodeError)),
         reraise=True,
-        before_sleep=before_sleep_log(logger, logging.WARN)
+        before_sleep=before_sleep_log(logger, logging.WARN),
+        sleep=trio.sleep
     )
-    def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
-        resp = self.client.put(url=url, params=params)
+    async def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
+        resp = await self.client.put(url=url, params=params)
         resp.raise_for_status()
         return resp.json()
 
-    def get_results_from_pages(
+    async def get_results_from_pages(
         self, endpoint: str, params: dict[str, Any] | None = None, page_size: int = 50, limit: int | None = None
     ) -> list[dict[str, Any]]:
         extra_params: dict[str, Any]
@@ -90,7 +100,7 @@ class API:
 
         while more_pages:
             logger.debug(f'Params: {extra_params}')
-            get_resp = self.get(url=endpoint, params=extra_params)
+            get_resp = await self.get(url=endpoint, params=extra_params)
             results += get_resp.data
             if get_resp.next_page_params is None:
                 more_pages = False

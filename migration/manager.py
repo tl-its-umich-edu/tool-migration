@@ -19,11 +19,11 @@ class AccountManagerBase(ABC):
     account_id: int
 
     @abstractmethod
-    def get_tools_installed_in_account(self) -> list[ExternalTool]:
+    async def get_tools_installed_in_account(self) -> list[ExternalTool]:
         pass
 
     @abstractmethod
-    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
+    async def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
         pass
 
 
@@ -31,14 +31,14 @@ class AccountManagerBase(ABC):
 class AccountManager(AccountManagerBase):
     api: API
 
-    def get_tools_installed_in_account(self) -> list[ExternalTool]:
+    async def get_tools_installed_in_account(self) -> list[ExternalTool]:
         params = {"include_parents": True}
-        results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/external_tools', params)
+        results = await self.api.get_results_from_pages(f'/accounts/{self.account_id}/external_tools', params)
         tools = [ExternalTool(id=tool_dict['id'], name=tool_dict['name']) for tool_dict in results]
         return tools
 
     @time_execution
-    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
+    async def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
         limit_chunks = None
         if limit is not None:
             limit_chunks = chunk_integer(limit, len(term_ids))
@@ -46,7 +46,7 @@ class AccountManager(AccountManagerBase):
         results: list[dict[str, Any]] = []
         for i, term_id in enumerate(term_ids):
             limit_for_term = limit_chunks[i] if limit_chunks is not None else None
-            term_results = self.api.get_results_from_pages(
+            term_results = await self.api.get_results_from_pages(
                 f'/accounts/{self.account_id}/courses',
                 params={ 'enrollment_term_id': term_id },
                 page_size=50,
@@ -73,11 +73,11 @@ class WarehouseAccountManager(AccountManagerBase):
     def __post_init__(self):
         self.account_manager = AccountManager(self.account_id, self.api)
 
-    def get_tools_installed_in_account(self) -> list[ExternalTool]:
-        return self.account_manager.get_tools_installed_in_account()
+    async def get_tools_installed_in_account(self) -> list[ExternalTool]:
+        return await self.account_manager.get_tools_installed_in_account()
 
-    def get_subaccount_ids(self) -> list[int]:
-        results = self.api.get_results_from_pages(
+    async def get_subaccount_ids(self) -> list[int]:
+        results = await self.api.get_results_from_pages(
             f'/accounts/{self.account_id}/sub_accounts', { 'recursive': True }
         )
         sub_account_ids = [result['id'] for result in results]
@@ -85,8 +85,8 @@ class WarehouseAccountManager(AccountManagerBase):
         return sub_account_ids
 
     @time_execution
-    def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
-        account_ids = [self.account_id] + self.get_subaccount_ids()
+    async def get_courses_in_terms(self, term_ids: list[int], limit: int | None = None) -> list[Course]:
+        account_ids = [self.account_id] + await self.get_subaccount_ids()
 
         conn = self.db.get_connection()
         statement = sqlalchemy.text(f'''
@@ -148,8 +148,11 @@ class CourseManager:
             position=data['position']
         )
 
-    def get_tool_tabs(self) -> list[ExternalToolTab]:
-        results = self.api.get_results_from_pages(f'/courses/{self.course.id}/tabs')
+    def create_course_log_message(self, message: str) -> str:
+        return f'{self.course}\n{message}\n- - -'
+
+    async def get_tool_tabs(self) -> list[ExternalToolTab]:
+        results = await self.api.get_results_from_pages(f'/courses/{self.course.id}/tabs')
         
         tabs: list[ExternalToolTab] = []
         for result in results:
@@ -158,43 +161,52 @@ class CourseManager:
                 tabs.append(CourseManager.convert_data_to_tool_tab(result))
         return tabs
 
-    def update_tool_tab(self, tab: ExternalToolTab, is_hidden: bool, position: int | None = None):
+    async def update_tool_tab(self, tab: ExternalToolTab, is_hidden: bool, position: int | None = None):
         params: dict[str, Any] = { "hidden": is_hidden }
         if position is not None:
             params.update({ "position": position })
 
-        result = self.api.put(
+        result = await self.api.put(
             f'/courses/{self.course.id}/tabs/{tab.id}',
             params=params
         )
         logger.debug(result)
         return CourseManager.convert_data_to_tool_tab(result)
 
-    def replace_tool_tab(
+    async def replace_tool_tab(
         self, source_tab: ExternalToolTab, target_tab: ExternalToolTab
     ) -> tuple[ExternalToolTab, ExternalToolTab]:
         logger.debug([source_tab, target_tab])
 
         # Source tool is hidden in course, don't do anything
         if source_tab.is_hidden:
-            logger.debug(f'Skipping replacement for {[source_tab, target_tab]}; source tool is hidden.')
+            logger.debug(self.create_course_log_message(
+                f'Skipping replacement for {[source_tab, target_tab]}; source tool is hidden.'
+            ))
             return (source_tab, target_tab)
         else:
             if not target_tab.is_hidden:
-                logger.warning(
+                logger.warning(self.create_course_log_message(
                     f'Both tools ({[source_tab, target_tab]}) are currently available. ' +
                     'Rolling back will hide the target tool!'
-                )
-                logger.debug((f'Skipping update for {target_tab}; tool is already available.'))
+                ))
+                logger.debug(self.create_course_log_message(
+                    f'Skipping update for {target_tab}; tool is already available.'
+                ))
                 new_target_tab = target_tab
             else:
                 target_position = source_tab.position
-                new_target_tab = self.update_tool_tab(tab=target_tab, is_hidden=False, position=target_position)
-                logger.info(f"Made available target tool in course's navigation: {new_target_tab}")
+                new_target_tab = await self.update_tool_tab(tab=target_tab, is_hidden=False, position=target_position)
+                logger.info(self.create_course_log_message(
+                    f"Made available target tool in course's navigation: {new_target_tab}"
+                ))
 
             # Always hide the source tool if it's available
-            new_source_tab = self.update_tool_tab(tab=source_tab, is_hidden=True)
-            logger.info(f"Hid source tool in course's navigation: {new_source_tab}")
+            new_source_tab = await self.update_tool_tab(tab=source_tab, is_hidden=True)
+            logger.info(self.create_course_log_message(
+                f"Hid source tool in course's navigation: {new_source_tab}"
+            ))
+
             return (new_source_tab, new_target_tab)
 
 
