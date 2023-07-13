@@ -4,6 +4,7 @@ from contextlib import nullcontext
 
 import trio
 from dotenv import load_dotenv
+from tqdm import tqdm
 
 from api import API
 from data import Course, ExternalTool, ToolMigration
@@ -14,6 +15,15 @@ from utils import convert_csv_to_int_list, find_entity_by_id, time_execution
 
 
 logger = logging.getLogger(__name__)
+
+
+class TrioProgress(trio.abc.Instrument):
+
+    def __init__(self, total, **kwargs):
+        self.tqdm = tqdm(total=total, **kwargs)
+
+    def task_exited(self, task):
+        self.tqdm.update(1)
 
 
 def find_tools_for_migrations(
@@ -69,6 +79,9 @@ async def main(api: API, account_id: int, term_ids: list[int], migrations: list[
             for source_tool, target_tool in tool_pairs:
                 logger.info(f'Source tool: {source_tool}')
                 logger.info(f'Target tool: {target_tool}')
+
+                progress = TrioProgress(total=len(courses))
+                trio.lowlevel.add_instrument(progress)
                 async with trio.open_nursery() as nursery:
                     for course in courses:
                         nursery.start_soon(
@@ -78,7 +91,7 @@ async def main(api: API, account_id: int, term_ids: list[int], migrations: list[
                             source_tool,
                             target_tool
                         )
-
+                trio.lowlevel.remove_instrument(progress)
 
 if __name__ == '__main__':
     # get configuration (either env. variables, cli flags, or direct input)
