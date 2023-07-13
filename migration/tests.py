@@ -236,11 +236,12 @@ class CourseManagerTestCase(unittest.TestCase):
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
         self.test_course_id: int = int(os.getenv('TEST_COURSE_ID', '0'))
-        self.enrollment_term_id: int = int(os.getenv('ENROLLMENT_TERM_ID', '0'))
-        self.course_manager = CourseManager(
-            Course(self.test_course_id, name='Test Course', enrollment_term_id=self.enrollment_term_id),
-            self.api
+        course = Course(
+            self.test_course_id,
+            name='Test Course',
+            enrollment_term_id=0  # Just faking this, it won't be used
         )
+        self.course_manager = CourseManager(course, self.api)
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
         self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
 
@@ -251,6 +252,20 @@ class CourseManagerTestCase(unittest.TestCase):
             is_hidden=True,
             position=30
         )
+
+        setup_api = API(api_url, api_key)
+        setup_course_manager = CourseManager(course, setup_api)
+        with setup_api.client:
+            tabs_before = setup_course_manager.get_tool_tabs()
+            source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs_before)
+            target_tab = CourseManager.find_tab_by_tool_id(self.target_tool_id, tabs_before)
+            if source_tab is None or target_tab is None:
+                raise Exception(
+                    'One or both of the tools with these IDs are not available in this course: ' +
+                    str([self.source_tool_id, self.target_tool_id])
+                )
+            self.source_tab = source_tab
+            self.target_tab = target_tab
 
     def test_find_tab_by_tool_id_returns_tab(self):
         tab = CourseManager.find_tab_by_tool_id(99999, [self.test_external_tool_tab])
@@ -277,27 +292,58 @@ class CourseManagerTestCase(unittest.TestCase):
             self.assertNotEqual(new_tab.is_hidden, source_tab.is_hidden)
             self.assertEqual(new_tab.position, 5)
 
-    def test_manager_replaces_tool_tab_in_course(self):
+    def test_manager_replace_tool_tab_skips_if_source_hidden_and_target_available(self):
         with self.api.client:
-            tabs_before = self.course_manager.get_tool_tabs()
-            source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs_before)
-            target_tab = CourseManager.find_tab_by_tool_id(self.target_tool_id, tabs_before)
-            if source_tab is None or target_tab is None:
-                raise Exception(
-                    'One or both of the tools with these IDs are not available in this course: ' +
-                    str([self.source_tool_id, self.target_tool_id])
-                )
-            source_original_position = source_tab.position
+            # Set up
+            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=True)
+            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=False)
 
-            self.course_manager.replace_tool_tab(source_tab, target_tab)
-            tabs_after = self.course_manager.get_tool_tabs()
+            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+                old_source_tab, old_target_tab
+            )
 
-        source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs_after)
-        target_tab = CourseManager.find_tab_by_tool_id(self.target_tool_id, tabs_after)
-        if source_tab is not None and target_tab is not None:
-            self.assertTrue(source_tab.is_hidden)
-            self.assertFalse(target_tab.is_hidden)
-            self.assertTrue(target_tab.position == source_original_position)
+        self.assertEqual(old_source_tab, new_source_tab)
+        self.assertEqual(old_target_tab, new_target_tab)
+
+    def test_manager_replace_tool_tab_skips_if_source_hidden_and_target_hidden(self):
+        with self.api.client:
+            # Set up
+            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=True)
+            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=True)
+
+            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+                old_source_tab, old_target_tab
+            )
+
+        self.assertEqual(old_source_tab, new_source_tab)
+        self.assertEqual(old_target_tab, new_target_tab)
+
+    def test_manager_replace_tool_tab_fully_replaces_source_with_target(self):
+        with self.api.client:
+            # Set up
+            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=False, position=5)
+            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=True)
+
+            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+                old_source_tab, old_target_tab
+            )
+
+        self.assertTrue(new_source_tab.is_hidden)
+        self.assertFalse(new_target_tab.is_hidden)
+        self.assertEqual(old_source_tab.position, new_target_tab.position)
+
+    def test_manager_replace_tool_tab_only_hides_source_if_target_available(self):
+        with self.api.client:
+            # Set up
+            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=False)
+            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=False)
+
+            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+                old_source_tab, old_target_tab
+            )
+
+        self.assertTrue(new_source_tab.is_hidden)
+        self.assertEqual(old_target_tab, new_target_tab)
 
 
 class UtilsTestCase(unittest.TestCase):
