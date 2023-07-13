@@ -177,7 +177,7 @@ class CourseManager:
 
         # Source tool is hidden in course, don't do anything
         if source_tab.is_hidden:
-            logger.info(f'Skipping replacement for {[source_tab, target_tab]}; source tool is hidden.')
+            logger.debug(f'Skipping replacement for {[source_tab, target_tab]}; source tool is hidden.')
             return (source_tab, target_tab)
         else:
             if not target_tab.is_hidden:
@@ -185,7 +185,7 @@ class CourseManager:
                     f'Both tools ({[source_tab, target_tab]}) are currently available. ' +
                     'Rolling back will hide the target tool!'
                 )
-                logger.info((f'Skipping update for {target_tab}; tool is already available.'))
+                logger.debug((f'Skipping update for {target_tab}; tool is already available.'))
                 new_target_tab = target_tab
             else:
                 target_position = source_tab.position
