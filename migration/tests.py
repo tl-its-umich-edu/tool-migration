@@ -7,6 +7,7 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 import httpx
+import trio
 from dotenv import load_dotenv
 
 from data import Course, ExternalTool, ExternalToolTab, ToolMigration
@@ -20,12 +21,12 @@ from utils import convert_csv_to_int_list, chunk_integer, find_entity_by_id, tim
 logger = logging.getLogger(__name__)
 
 
-class APITestCase(unittest.TestCase):
+class APITestCase(unittest.IsolatedAsyncioTestCase):
     """
     Integration/unit tests for API class
     """
 
-    def setUp(self) -> None:
+    async def setUp(self) -> None:
         self.api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(self.api_url, api_key)
@@ -45,17 +46,19 @@ class APITestCase(unittest.TestCase):
         params = API.get_next_page_params(mock_response)
         self.assertEqual(params, {'page': ['2'], 'per_page': ['5']})
 
-    def test_get_results_from_pages(self):
-        with self.api.client:
-            results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5)
+    async def test_get_results_from_pages(self):
+        async with self.api.client:
+            results = await self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5)
         self.assertTrue(len(results) > 1)
 
-    def test_get_results_from_pages_with_limit(self):
-        with self.api.client:
-            results = self.api.get_results_from_pages(f'/accounts/{self.account_id}/courses', page_size=5, limit=2)
+    async def test_get_results_from_pages_with_limit(self):
+        async with self.api.client:
+            results = await self.api.get_results_from_pages(
+                f'/accounts/{self.account_id}/courses', page_size=5, limit=2
+            )
         self.assertTrue(len(results) == 2)
 
-    def test_get_retries_on_http_error(self):
+    async def test_get_retries_on_http_error(self):
         request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
         resp = httpx.Response(
             status_code=httpx.codes.BAD_GATEWAY,
@@ -69,12 +72,12 @@ class APITestCase(unittest.TestCase):
 
         with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
             mock_get_call.side_effect = [resp, expected_resp]
-            with self.api.client:
-                result = self.api.get(self.course_url)
+            async with self.api.client:
+                result = await self.api.get(self.course_url)
         self.assertEqual(self.course_data, result.data)
         self.assertEqual(mock_get_call.call_count, 2)
 
-    def test_get_retries_on_decode_error(self):
+    async def test_get_retries_on_decode_error(self):
         request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
         bad_json_resp = httpx.Response(
             status_code=httpx.codes.OK,
@@ -88,12 +91,12 @@ class APITestCase(unittest.TestCase):
         )
         with patch.object(self.api.client, 'get', autospec=True) as mock_get_call:
             mock_get_call.side_effect = [bad_json_resp, expected_resp]
-            with self.api.client:
-                result = self.api.get(self.course_url)
+            async with self.api.client:
+                result = await self.api.get(self.course_url)
         self.assertEqual(self.course_data, result.data)
         self.assertEqual(mock_get_call.call_count, 2)
 
-    def test_put_retries_until_failure(self):
+    async def test_put_retries_until_failure(self):
         request = MagicMock(httpx.Request, autospec=True, url=self.course_url)
         bad_resp = httpx.Response(
             status_code=httpx.codes.BAD_GATEWAY,
@@ -101,13 +104,13 @@ class APITestCase(unittest.TestCase):
         )
         with patch.object(self.api.client, 'put', autospec=True) as mock_put_call:
             mock_put_call.side_effect = [bad_resp, bad_resp, bad_resp, bad_resp]
-            with self.api.client:
+            async with self.api.client:
                 with self.assertRaises(httpx.HTTPStatusError):
-                    self.api.put(self.course_url, params={ "name": "Test Course!" })
+                    await self.api.put(self.course_url, params={ "name": "Test Course!" })
         self.assertEqual(mock_put_call.call_count, 4)
 
 
-class AccountManagerTestCase(unittest.TestCase):
+class AccountManagerTestCase(unittest.IsolatedAsyncioTestCase):
     """
     Integration tests for AccountManager class
     """
@@ -119,19 +122,19 @@ class AccountManagerTestCase(unittest.TestCase):
         self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
         self.api = API(api_url, api_key)
 
-    def test_manager_get_tools(self):
-        with self.api.client:
+    async def test_manager_get_tools(self):
+        async with self.api.client:
             manager = AccountManager(self.test_account_id, self.api)
-            tools = manager.get_tools_installed_in_account()
+            tools = await manager.get_tools_installed_in_account()
         self.assertTrue(len(tools) > 0)
         for tool in tools:
             logger.debug(tool)
             self.assertTrue(isinstance(tool, ExternalTool))
 
-    def test_manager_get_courses_in_single_term(self):
-        with self.api.client:
+    async def test_manager_get_courses_in_single_term(self):
+        async with self.api.client:
             manager = AccountManager(self.test_account_id, self.api)
-            courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
+            courses = await manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
         for course in courses:
@@ -140,10 +143,10 @@ class AccountManagerTestCase(unittest.TestCase):
         term_id_set = set(term_ids)
         self.assertTrue(len(term_id_set) == 1)
 
-    def test_manager_get_courses_in_multiple_terms(self):
-        with self.api.client:
+    async def test_manager_get_courses_in_multiple_terms(self):
+        async with self.api.client:
             manager = AccountManager(self.test_account_id, self.api)
-            courses = manager.get_courses_in_terms(self.enrollment_term_ids)
+            courses = await manager.get_courses_in_terms(self.enrollment_term_ids)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
         for course in courses:
@@ -152,17 +155,17 @@ class AccountManagerTestCase(unittest.TestCase):
         term_id_set = set(term_ids)
         self.assertTrue(len(term_id_set) > 1)
 
-    def test_manager_get_courses_with_limit(self):
-        with self.api.client:
+    async def test_manager_get_courses_with_limit(self):
+        async with self.api.client:
             manager = AccountManager(self.test_account_id, self.api)
-            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 50)
+            courses = await manager.get_courses_in_terms(self.enrollment_term_ids, 50)
         self.assertTrue(len(courses) > 0)
         for course in courses:
             self.assertTrue(isinstance(course, Course))
         self.assertTrue(len(courses) <= 50)
 
 
-class WarehouseAccountManagerTestCase(unittest.TestCase):
+class WarehouseAccountManagerTestCase(unittest.IsolatedAsyncioTestCase):
     """
     Integration tests for WarehouseAccountManager class
     """
@@ -184,18 +187,19 @@ class WarehouseAccountManagerTestCase(unittest.TestCase):
         self.db = DB(Dialect.POSTGRES, wh_db_params)
         self.test_account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
 
-    def test_get_subaccount_ids(self):
-        with self.api.client:
+    async def test_get_subaccount_ids(self):
+        async with self.api.client:
             manager = WarehouseAccountManager(account_id=self.test_account_id, db=self.db, api=self.api)
-            subaccount_ids = manager.get_subaccount_ids()
+            subaccount_ids = await manager.get_subaccount_ids()
         self.assertTrue(len(subaccount_ids) > 0)
         for subaccount_id in subaccount_ids:
             self.assertIsInstance(subaccount_id, int)
 
-    def test_manager_get_courses_in_single_term(self):
-        with self.db, self.api.client:
-            manager = WarehouseAccountManager(account_id=self.test_account_id, db=self.db, api=self.api)
-            courses = manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
+    async def test_manager_get_courses_in_single_term(self):
+        with self.db:
+            async with self.api.client:
+                manager = WarehouseAccountManager(account_id=self.test_account_id, db=self.db, api=self.api)
+                courses = await manager.get_courses_in_terms([self.enrollment_term_ids[0]], 150)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
         for course in courses:
@@ -204,10 +208,11 @@ class WarehouseAccountManagerTestCase(unittest.TestCase):
         term_id_set = set(term_ids)
         self.assertTrue(len(term_id_set) == 1)
 
-    def test_manager_get_courses_in_multiple_terms(self):
-        with self.db, self.api.client:
-            manager = WarehouseAccountManager(account_id=self.test_account_id, db=self.db, api=self.api)
-            courses = manager.get_courses_in_terms(self.enrollment_term_ids)
+    async def test_manager_get_courses_in_multiple_terms(self):
+        with self.db:
+            async with self.api.client:
+                manager = WarehouseAccountManager(account_id=self.test_account_id, db=self.db, api=self.api)
+                courses = await manager.get_courses_in_terms(self.enrollment_term_ids)
         self.assertTrue(len(courses) > 0)
         term_ids: list[int] = []
         for course in courses:
@@ -216,22 +221,23 @@ class WarehouseAccountManagerTestCase(unittest.TestCase):
         term_id_set = set(term_ids)
         self.assertTrue(len(term_id_set) > 1)
 
-    def test_manager_get_courses_with_limit(self):
-        with self.db, self.api.client:
-            manager = WarehouseAccountManager(self.test_account_id, self.db, api=self.api)
-            courses = manager.get_courses_in_terms(self.enrollment_term_ids, 50)
+    async def test_manager_get_courses_with_limit(self):
+        with self.db:
+            async with self.api.client:
+                manager = WarehouseAccountManager(self.test_account_id, self.db, api=self.api)
+                courses = await manager.get_courses_in_terms(self.enrollment_term_ids, 50)
         self.assertTrue(len(courses) > 0)
         for course in courses:
             self.assertTrue(isinstance(course, Course))
         self.assertTrue(len(courses) <= 50)
 
 
-class CourseManagerTestCase(unittest.TestCase):
+class CourseManagerTestCase(unittest.IsolatedAsyncioTestCase):
     """
     Integration/unit tests for CourseManager class
     """
 
-    def setUp(self):
+    async def asyncSetUp(self):
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
@@ -255,8 +261,8 @@ class CourseManagerTestCase(unittest.TestCase):
 
         setup_api = API(api_url, api_key)
         setup_course_manager = CourseManager(course, setup_api)
-        with setup_api.client:
-            tabs_before = setup_course_manager.get_tool_tabs()
+        async with setup_api.client:
+            tabs_before = await setup_course_manager.get_tool_tabs()
             source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs_before)
             target_tab = CourseManager.find_tab_by_tool_id(self.target_tool_id, tabs_before)
             if source_tab is None or target_tab is None:
@@ -275,56 +281,56 @@ class CourseManagerTestCase(unittest.TestCase):
         tab = CourseManager.find_tab_by_tool_id(100000, [self.test_external_tool_tab])
         self.assertTrue(tab is None)
 
-    def test_manager_gets_tool_tabs_in_course(self):
-        with self.api.client:
-            tabs = self.course_manager.get_tool_tabs()
+    async def test_manager_gets_tool_tabs_in_course(self):
+        async with self.api.client:
+            tabs = await self.course_manager.get_tool_tabs()
         self.assertTrue(len(tabs) > 0)
         for tab in tabs:
             self.assertTrue(isinstance(tab, ExternalToolTab))
 
-    def test_update_tool_tab_with_position(self):
-        with self.api.client:
-            tabs = self.course_manager.get_tool_tabs()
+    async def test_update_tool_tab_with_position(self):
+        async with self.api.client:
+            tabs = await self.course_manager.get_tool_tabs()
             source_tab = CourseManager.find_tab_by_tool_id(self.source_tool_id, tabs)
             if source_tab is None:
                 raise InvalidToolIdsException(f'Tool with ID {self.source_tool_id} is not available in this course')
-            new_tab = self.course_manager.update_tool_tab(source_tab, is_hidden=not source_tab.is_hidden, position=5)
+            new_tab = await self.course_manager.update_tool_tab(source_tab, is_hidden=not source_tab.is_hidden, position=5)
             self.assertNotEqual(new_tab.is_hidden, source_tab.is_hidden)
             self.assertEqual(new_tab.position, 5)
 
-    def test_manager_replace_tool_tab_skips_if_source_hidden_and_target_available(self):
-        with self.api.client:
+    async def test_manager_replace_tool_tab_skips_if_source_hidden_and_target_available(self):
+        async with self.api.client:
             # Set up
-            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=True)
-            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=False)
+            old_source_tab = await self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=True)
+            old_target_tab = await self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=False)
 
-            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+            new_source_tab, new_target_tab = await self.course_manager.replace_tool_tab(
                 old_source_tab, old_target_tab
             )
 
         self.assertEqual(old_source_tab, new_source_tab)
         self.assertEqual(old_target_tab, new_target_tab)
 
-    def test_manager_replace_tool_tab_skips_if_source_hidden_and_target_hidden(self):
-        with self.api.client:
+    async def test_manager_replace_tool_tab_skips_if_source_hidden_and_target_hidden(self):
+        async with self.api.client:
             # Set up
-            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=True)
-            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=True)
+            old_source_tab = await self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=True)
+            old_target_tab = await self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=True)
 
-            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+            new_source_tab, new_target_tab = await self.course_manager.replace_tool_tab(
                 old_source_tab, old_target_tab
             )
 
         self.assertEqual(old_source_tab, new_source_tab)
         self.assertEqual(old_target_tab, new_target_tab)
 
-    def test_manager_replace_tool_tab_fully_replaces_source_with_target(self):
-        with self.api.client:
+    async def test_manager_replace_tool_tab_fully_replaces_source_with_target(self):
+        async with self.api.client:
             # Set up
-            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=False, position=5)
-            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=True)
+            old_source_tab = await self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=False, position=5)
+            old_target_tab = await self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=True)
 
-            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+            new_source_tab, new_target_tab = await self.course_manager.replace_tool_tab(
                 old_source_tab, old_target_tab
             )
 
@@ -332,13 +338,13 @@ class CourseManagerTestCase(unittest.TestCase):
         self.assertFalse(new_target_tab.is_hidden)
         self.assertEqual(old_source_tab.position, new_target_tab.position)
 
-    def test_manager_replace_tool_tab_only_hides_source_if_target_available(self):
-        with self.api.client:
+    async def test_manager_replace_tool_tab_only_hides_source_if_target_available(self):
+        async with self.api.client:
             # Set up
-            old_source_tab = self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=False)
-            old_target_tab = self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=False)
+            old_source_tab = await self.course_manager.update_tool_tab(tab=self.source_tab, is_hidden=False)
+            old_target_tab = await self.course_manager.update_tool_tab(tab=self.target_tab, is_hidden=False)
 
-            new_source_tab, new_target_tab = self.course_manager.replace_tool_tab(
+            new_source_tab, new_target_tab = await self.course_manager.replace_tool_tab(
                 old_source_tab, old_target_tab
             )
 
@@ -405,7 +411,7 @@ class UtilsTestCase(unittest.TestCase):
         self.assertRegex(cm.output[0], re.compile(r'sleep took \d+\.\d+ seconds to complete\.'))
 
 
-class MainTestCase(unittest.TestCase):
+class MainTestCase(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         api_url: str = os.getenv('API_URL', '')
@@ -417,15 +423,16 @@ class MainTestCase(unittest.TestCase):
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
         self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
 
-    def test_find_tool_ids_for_migrations_raises_exception_when_tool_ids_are_invalid(self):
-        with self.api.client:
+    async def test_find_tool_ids_for_migrations_raises_exception_when_tool_ids_are_invalid(self):
+        async with self.api.client:
             account_manager = AccountManager(self.account_id, self.api)
-            tools = account_manager.get_tools_installed_in_account()
+            tools = await account_manager.get_tools_installed_in_account()
         with self.assertRaises(InvalidToolIdsException):
             find_tools_for_migrations(tools, [ToolMigration(100000000, 100000001)])
 
     def test_main_migrates_tool_successfully(self):
-        main(
+        trio.run(
+            main,
             self.api,
             self.account_id,
             self.enrollment_term_ids,
@@ -446,5 +453,8 @@ if __name__ == '__main__':
     httpx_logger.setLevel(http_log_level)
     httpcore_level = logging.getLogger('httpcore')
     httpcore_level.setLevel(http_log_level)
+
+    asyncio_logger = logging.getLogger('asyncio')
+    asyncio_logger.setLevel(logging.ERROR)
 
     unittest.main()
