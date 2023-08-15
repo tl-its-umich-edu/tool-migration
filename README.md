@@ -8,7 +8,7 @@ This is the recommended way to run the application.  Docker compose will ensure 
 
 ### Prerequisites
 * [Docker Desktop](https://www.docker.com/products/docker-desktop/) — This must be installed first.
-* [tool-migration](https://github.com/tl-its-umich-edu/tool-migration/archive/refs/heads/main.zip) — Download the latest release of this app and unzip it.  (Alternatively, the repository can be cloned.)
+* [tool-migration](https://github.com/tl-its-umich-edu/tool-migration/releases) — Download the latest release of this app and unzip it.  The latest release will be at the top of the list.  The zip file is found under the heading "Assets".  (Alternatively, the repository can be cloned.)
 
 ### Configuration
 
