@@ -1,6 +1,6 @@
 # Canvas LTI Tool Migration
 
-This application is intended to migrate LTI tools in a Canvas instance from one version to another.
+This application migrates LTI tools in a Canvas instance from one version to another.
 
 ## Running with Docker compose
 
