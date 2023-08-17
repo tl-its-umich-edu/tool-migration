@@ -24,7 +24,7 @@ Then open the newly copied `.env` file with an editor and fill in the missing va
 open -a TextEdit .env
 ```
 
-In the future, there may be other ways to configure, such as a CLI, prompts, or files.
+Note: Starting the editor this way is recommended because the hidden file `.env` is not visible in the editor's "Open" dialog.
 
 ### Running
 
@@ -58,7 +58,7 @@ cp .env.sample .env
 # Then fill in the missing values
 ```
 
-There may be other ways to configure in the future, such as a CLI, prompts, or files.
+Note: Starting the editor this way is recommended because the hidden file `.env` is not visible in the editor's "Open" dialog.
 
 ### Running
 
