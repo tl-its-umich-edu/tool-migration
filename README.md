@@ -28,6 +28,20 @@ Note: Starting the editor this way is recommended because the hidden file `.env`
 
 ### Running
 
+#### Start Docker Desktop
+
+Docker Desktop must be running before the application can be run.  To start Docker Desktop, open the "Docker" app from the Applications folder.
+
+Alternatively, Docker Desktop can be started from the command line:
+
+```shell
+open -a Docker
+```
+
+#### Run the application
+
+When Docker Desktop is running, the application can be run with the command:
+
 ```shell
 docker compose up
 ```
