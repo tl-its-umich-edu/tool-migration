@@ -15,16 +15,14 @@ This is the recommended way to run the application.  Docker compose will ensure 
 In a shell (e.g., using Terminal.app on macOS), navigate to the directory where the app was unzipped or cloned.  Then copy the sample configuration file:
 
 ```shell
-cp .env.sample .env
+cp env.sample env
 ```
 
-Then open the newly copied `.env` file with an editor and fill in the missing values.  E.g., to edit with TextEdit.app on macOS:
+Then open the newly copied `env` file with an editor and fill in the missing values.  E.g., to edit with TextEdit.app on macOS:
 
 ```shell
-open -a TextEdit .env
+open -a TextEdit env
 ```
-
-Note: Starting the editor this way is recommended because the hidden file `.env` is not visible in the editor's "Open" dialog.
 
 ### Running
 
@@ -68,11 +66,9 @@ pip install -r requirements.txt
 ### Configuration
 
 ```shell
-cp .env.sample .env
+cp env.sample env
 # Then fill in the missing values
 ```
-
-Note: Starting the editor this way is recommended because the hidden file `.env` is not visible in the editor's "Open" dialog.
 
 ### Running
 
