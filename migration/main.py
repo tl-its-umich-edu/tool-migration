@@ -97,7 +97,14 @@ if __name__ == '__main__':
     # get configuration (either env. variables, cli flags, or direct input)
 
     root_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    load_dotenv(os.path.join(root_dir, '.env'), verbose=True)
+    env_file_name: str = os.path.join(root_dir, 'env')
+
+    if not os.path.exists(env_file_name):
+        logger.error(f'File "{env_file_name}" not found.  '
+                     'Please create one and try again.')
+        exit(1)
+
+    load_dotenv(env_file_name, verbose=True)
 
     # Set up logging
     log_level = os.getenv('LOG_LEVEL', 'INFO')
