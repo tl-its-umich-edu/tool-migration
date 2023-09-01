@@ -39,7 +39,8 @@ def find_tools_for_migrations(
             if target_tool is None:
                 invalid_tool_ids.append(migration.target_id)
             raise InvalidToolIdsException(
-                'The following tool IDs from one of your migrations were not found in the account: ' +
+                'The following tool IDs from one of your migrations '
+                'were not found in the account: ' +
                 str(invalid_tool_ids)
             )
         tool_pairs.append((source_tool, target_tool))
@@ -55,7 +56,8 @@ async def migrate_tool_for_course(api: API, course: Course,
     target_tool_tab = CourseManager.find_tab_by_tool_id(target_tool.id, tabs)
     if source_tool_tab is None or target_tool_tab is None:
         raise InvalidToolIdsException(
-            'One or both of the following tool IDs are not available in this course: ' +
+            'One or both of the following tool IDs are not available in '
+            'this course: ' +
             str([source_tool.id, target_tool.id])
         )
     await course_manager.replace_tool_tab(source_tool_tab, target_tool_tab)
@@ -81,7 +83,8 @@ async def main(api: API, account_id: int, term_ids: list[int],
             # get list of tools available in account
             courses = await account_manager.get_courses_in_terms(term_ids)
             logger.info(
-                f'Number of courses found in account {account_id} for terms {term_ids}: {len(courses)}')
+                f'Number of courses found in account {account_id} '
+                f'for terms {term_ids}: {len(courses)}')
 
             for source_tool, target_tool in tool_pairs:
                 logger.info(f'Source tool: {source_tool}')
@@ -127,7 +130,7 @@ if '__main__' == __name__:
 
     api_url: str = os.getenv('API_URL', '')
     api_key: str = os.getenv('API_KEY', '')
-    account_id: int = int(os.getenv('ACCOUNT_ID', '0'))
+    account_id: int = int(os.getenv('ACCOUNT_ID', 0))
     enrollment_term_ids: list[int] = convert_csv_to_int_list(
         os.getenv('ENROLLMENT_TERM_IDS', '0'))
 
@@ -146,7 +149,8 @@ if '__main__' == __name__:
             wh_password is not None
     ):
         logger.info(
-            'Warehouse connection is configured, so it will be used for some data fetching...')
+            'Warehouse connection is configured, so it will be '
+            'used for some data fetching...')
         db = DB(
             Dialect.POSTGRES,
             {
@@ -159,7 +163,8 @@ if '__main__' == __name__:
         )
     else:
         logger.info(
-            'Warehouse connection is not configured, so falling back to only using the Canvas API...')
+            'Warehouse connection is not configured, so falling back '
+            'to only using the Canvas API...')
 
     source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', 0))
     target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', 0))
