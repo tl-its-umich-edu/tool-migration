@@ -6,7 +6,7 @@ services:
       context: .
       dockerfile: Dockerfile
     env_file:
-      - .env
+      - env
     container_name: tool-migration_main
     volumes:
       - ./:/app
