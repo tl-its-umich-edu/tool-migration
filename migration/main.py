@@ -132,7 +132,7 @@ if '__main__' == __name__:
     api_key: str = os.getenv('API_KEY', '')
     account_id: int = int(os.getenv('ACCOUNT_ID', 0))
     enrollment_term_ids: list[int] = convert_csv_to_int_list(
-        os.getenv('ENROLLMENT_TERM_IDS', '0'))
+        os.getenv('ENROLLMENT_TERM_IDS_CSV', '0'))
 
     wh_host = os.getenv('WH_HOST')
     wh_port = os.getenv('WH_PORT')
