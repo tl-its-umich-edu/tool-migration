@@ -111,12 +111,11 @@ if '__main__' == __name__:
     root_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env_file_name: str = os.path.join(root_dir, 'env')
 
-    if not os.path.exists(env_file_name):
-        logger.error(f'File "{env_file_name}" not found.  '
-                     'Please create one and try again.')
-        exit(1)
-
-    load_dotenv(env_file_name, verbose=True)
+    if os.path.exists(env_file_name):
+        load_dotenv(env_file_name, verbose=True)
+    else:
+        logger.info(f'File "{env_file_name}" not found.  '
+                     'Using existing environment.')
 
     # Set up logging
     log_level = os.getenv('LOG_LEVEL', logging.INFO)
@@ -132,7 +131,7 @@ if '__main__' == __name__:
     api_key: str = os.getenv('API_KEY', '')
     account_id: int = int(os.getenv('ACCOUNT_ID', 0))
     enrollment_term_ids: list[int] = convert_csv_to_int_list(
-        os.getenv('ENROLLMENT_TERM_IDS', '0'))
+        os.getenv('ENROLLMENT_TERM_IDS_CSV', '0'))
 
     wh_host = os.getenv('WH_HOST')
     wh_port = os.getenv('WH_PORT')

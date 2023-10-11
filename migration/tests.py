@@ -119,7 +119,7 @@ class AccountManagerTestCase(unittest.IsolatedAsyncioTestCase):
         api_url: str = os.getenv('API_URL', '')
         api_key: str = os.getenv('API_KEY', '')
         self.test_account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
-        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
+        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS_CSV', '0'))
         self.api = API(api_url, api_key)
 
     async def test_manager_get_tools(self):
@@ -183,7 +183,7 @@ class WarehouseAccountManagerTestCase(unittest.IsolatedAsyncioTestCase):
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
 
-        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
+        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS_CSV', '0'))
         self.db = DB(Dialect.POSTGRES, wh_db_params)
         self.test_account_id = int(os.getenv('TEST_ACCOUNT_ID', 0))
 
@@ -418,7 +418,7 @@ class MainTestCase(unittest.IsolatedAsyncioTestCase):
         api_key: str = os.getenv('API_KEY', '')
         self.api = API(api_url, api_key)
         self.account_id: int = int(os.getenv('ACCOUNT_ID', '0'))
-        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS', '0'))
+        self.enrollment_term_ids: list[int] = convert_csv_to_int_list(os.getenv('ENROLLMENT_TERM_IDS_CSV', '0'))
 
         self.source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', '0'))
         self.target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', '0'))
