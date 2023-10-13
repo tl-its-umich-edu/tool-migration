@@ -39,14 +39,15 @@ class API:
         url: str,
         key: str,
         endpoint_type: EndpointType = EndpointType.REST,
-        timeout: int = 10
+        timeout: float = 10.0
     ):
         headers = {'Authorization': f'Bearer {key}'}
+        timeoutsConfiguration = httpx.Timeout(timeout, pool=None)
         limits = httpx.Limits(max_connections=MAX_ASYNC_CONNS)
         self.client = httpx.AsyncClient(
             base_url=url + endpoint_type.value,
             headers=headers,
-            timeout=timeout,
+            timeout=timeoutsConfiguration,
             limits=limits
         )
 
