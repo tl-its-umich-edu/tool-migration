@@ -105,13 +105,19 @@ async def main(api: API, account_id: int, term_ids: list[int],
 
 
 if '__main__' == __name__:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        style='{',
+        format='{asctime} | {levelname} | {module}:{lineno} | {message}')
+
+    logger.info('Starting migration…')
 
     # get configuration (either env. variables, cli flags, or direct input)
     root_dir: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env_file_name: str = os.path.join(root_dir, 'env')
 
     if os.path.exists(env_file_name):
+        logger.info(f'Setting environment from file "{env_file_name}".')
         load_dotenv(env_file_name, verbose=True)
     else:
         logger.info(f'File "{env_file_name}" not found.  '
@@ -176,3 +182,5 @@ if '__main__' == __name__:
         [ToolMigration(source_id=source_tool_id, target_id=target_tool_id)],
         db
     )
+
+    logger.info('Migration complete.')
