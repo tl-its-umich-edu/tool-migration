@@ -149,11 +149,11 @@ class CourseManager:
         )
 
     def create_course_log_message(self, message: str) -> str:
-        return f'{self.course}\n{message}\n- - -'
+        return f'{self.course} | {message}'
 
     async def get_tool_tabs(self) -> list[ExternalToolTab]:
         results = await self.api.get_results_from_pages(f'/courses/{self.course.id}/tabs')
-        
+
         tabs: list[ExternalToolTab] = []
         for result in results:
             logger.debug(result)
