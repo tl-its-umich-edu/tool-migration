@@ -71,9 +71,18 @@ async def main(api: API, account_id: int, term_ids: list[int],
 
     async with api.client:
         with db if db is not None else nullcontext():  # type: ignore
+            account_name = await account_manager.get_name()
+            logger.info(f'Account ({account_id}) name: {repr(account_name)}')
+
+            term_names = await account_manager.get_term_names(term_ids)
+            logger.info(f'Term names…')
+            for term_id in term_ids:
+                logger.info(f'  Term ({term_id}): {repr(term_names[term_id])}')
+
             tools = await account_manager.get_tools_installed_in_account()
             logger.info(
-                f'Number of tools found in account {account_id}: {len(tools)}')
+                'Number of tools found in account'
+                f' ({account_id}): {len(tools)}')
 
             logger.debug('Tools…\n\t' +
                          '\n\t'.join([str(tool) for tool in tools]))
@@ -83,7 +92,7 @@ async def main(api: API, account_id: int, term_ids: list[int],
             # get list of tools available in account
             courses = await account_manager.get_courses_in_terms(term_ids)
             logger.info(
-                f'Number of courses found in account {account_id} '
+                f'Number of courses found in account ({account_id}) '
                 f'for terms {term_ids}: {len(courses)}')
 
             for source_tool, target_tool in tool_pairs:
@@ -104,7 +113,7 @@ async def main(api: API, account_id: int, term_ids: list[int],
                 trio.lowlevel.remove_instrument(progress)
 
 
-if '__main__' == __name__:
+def run():
     logging.basicConfig(
         level=logging.INFO,
         style='{',
@@ -123,9 +132,23 @@ if '__main__' == __name__:
         logger.info(f'File "{env_file_name}" not found.  '
                      'Using existing environment.')
 
+    logger.info('Parameters from environment…')
+
     # Set up logging
-    log_level = os.getenv('LOG_LEVEL', logging.INFO)
-    http_log_level = os.getenv('HTTP_LOG_LEVEL', logging.WARNING)
+    log_level_default = logging.INFO
+    log_level = os.getenv('LOG_LEVEL', log_level_default)
+    logger.info(f'  LOG_LEVEL: {repr(log_level)}')
+    if log_level == '':
+        log_level = log_level_default
+        logger.info(f'  Using default LOG_LEVEL: ({log_level})')
+
+    http_log_level_default = logging.WARNING
+    http_log_level = os.getenv('HTTP_LOG_LEVEL', http_log_level_default)
+    logger.info(f'  HTTP_LOG_LEVEL: {repr(http_log_level)}')
+    if http_log_level == '':
+        http_log_level = http_log_level_default
+        logger.info(f'  Using default HTTP_LOG_LEVEL: ({http_log_level})')
+
     logging.basicConfig(level=log_level)
 
     httpx_logger = logging.getLogger('httpx')
@@ -134,16 +157,38 @@ if '__main__' == __name__:
     httpcore_level.setLevel(http_log_level)
 
     api_url: str = os.getenv('API_URL', '')
+    logger.info(f'  API_URL: {repr(api_url)}')
+
     api_key: str = os.getenv('API_KEY', '')
+    logger.info(f'  API_KEY: *REDACTED*')
+
     account_id: int = int(os.getenv('ACCOUNT_ID', 0))
+    logger.info(f'  ACCOUNT_ID: ({account_id})')
+
     enrollment_term_ids: list[int] = convert_csv_to_int_list(
         os.getenv('ENROLLMENT_TERM_IDS_CSV', '0'))
+    logger.info(f'  ENROLLMENT_TERM_IDS_CSV: {enrollment_term_ids}')
+
+    source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', 0))
+    logger.info(f'  SOURCE_TOOL_ID: ({source_tool_id})')
+
+    target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', 0))
+    logger.info(f'  TARGET_TOOL_ID: ({target_tool_id})')
 
     wh_host = os.getenv('WH_HOST')
+    logger.info(f'  WH_HOST: {repr(wh_host)}')
+
     wh_port = os.getenv('WH_PORT')
+    logger.info(f'  WH_PORT: {repr(wh_port)}')
+
     wh_name = os.getenv('WH_NAME')
+    logger.info(f'  WH_NAME: {repr(wh_name)}')
+
     wh_user = os.getenv('WH_USER')
+    logger.info(f'  WH_USER: {repr(wh_user)}')
+
     wh_password = os.getenv('WH_PASSWORD')
+    logger.info(f'  WH_PASSWORD: *REDACTED*')
 
     db: DB | None = None
     if (
@@ -155,7 +200,7 @@ if '__main__' == __name__:
     ):
         logger.info(
             'Warehouse connection is configured, so it will be '
-            'used for some data fetching...')
+            'used for some data fetching…')
         db = DB(
             Dialect.POSTGRES,
             {
@@ -169,10 +214,7 @@ if '__main__' == __name__:
     else:
         logger.info(
             'Warehouse connection is not configured, so falling back '
-            'to only using the Canvas API...')
-
-    source_tool_id: int = int(os.getenv('SOURCE_TOOL_ID', 0))
-    target_tool_id: int = int(os.getenv('TARGET_TOOL_ID', 0))
+            'to only using the Canvas API…')
 
     trio.run(
         main,
@@ -184,3 +226,6 @@ if '__main__' == __name__:
     )
 
     logger.info('Migration complete.')
+
+if '__main__' == __name__:
+    run()
