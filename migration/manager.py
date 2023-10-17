@@ -1,7 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Dict
 
 import sqlalchemy
 
@@ -19,6 +19,14 @@ class AccountManagerBase(ABC):
     account_id: int
 
     @abstractmethod
+    async def get_name(self) -> str:
+        pass
+
+    @abstractmethod
+    async def get_term_names(self, term_ids: list[int]) -> Dict[int, str]:
+        pass
+
+    @abstractmethod
     async def get_tools_installed_in_account(self) -> list[ExternalTool]:
         pass
 
@@ -30,6 +38,18 @@ class AccountManagerBase(ABC):
 @dataclass
 class AccountManager(AccountManagerBase):
     api: API
+
+    async def get_name(self) -> str:
+        result = await self.api.get(f'/accounts/{self.account_id}')
+        return result.data['name']
+
+    async def get_term_names(self, term_ids: list[int]) -> Dict[int, str]:
+        results = await self.api.get(f'/accounts/1/terms')
+        term_names = {
+            result['id']: result['name']
+            for result in results.data['enrollment_terms']
+            if result['id'] in term_ids}
+        return term_names
 
     async def get_tools_installed_in_account(self) -> list[ExternalTool]:
         params = {"include_parents": True}
@@ -72,6 +92,12 @@ class WarehouseAccountManager(AccountManagerBase):
 
     def __post_init__(self):
         self.account_manager = AccountManager(self.account_id, self.api)
+
+    async def get_name(self) -> str:
+        return await self.account_manager.get_name()
+
+    async def get_term_names(self, term_ids: list[int]) -> Dict[int, str]:
+        return await self.account_manager.get_term_names(term_ids)
 
     async def get_tools_installed_in_account(self) -> list[ExternalTool]:
         return await self.account_manager.get_tools_installed_in_account()
