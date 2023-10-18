@@ -82,6 +82,9 @@ class API:
     )
     async def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
         resp = await self.client.put(url=url, params=params)
+        if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
+            logger.warning(f"HTTP {resp.status_code}: PUT {resp.url}; response: '{resp.text}'")
+            return None
         resp.raise_for_status()
         return resp.json()
 

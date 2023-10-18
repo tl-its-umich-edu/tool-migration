@@ -165,14 +165,15 @@ class CourseManager:
 
     @classmethod
     def convert_data_to_tool_tab(cls, data: dict[str, Any]) -> ExternalToolTab:
-        tool_id = int(data['id'].replace(cls.id_prefix, ''))
-        return ExternalToolTab(
-            id=data['id'],
-            label=data['label'],
-            tool_id=tool_id,
-            is_hidden=('hidden' in data.keys() and data['hidden'] is True),
-            position=data['position']
-        )
+        if data is not None:
+            tool_id = int(data['id'].replace(cls.id_prefix, ''))
+            return ExternalToolTab(
+                id=data['id'],
+                label=data['label'],
+                tool_id=tool_id,
+                is_hidden=('hidden' in data.keys() and data['hidden'] is True),
+                position=data['position']
+            )
 
     def create_course_log_message(self, message: str) -> str:
         return f'{self.course} | {message}'
@@ -223,15 +224,17 @@ class CourseManager:
             else:
                 target_position = source_tab.position
                 new_target_tab = await self.update_tool_tab(tab=target_tab, is_hidden=False, position=target_position)
-                logger.info(self.create_course_log_message(
-                    f"Made available target tool in course's navigation: {new_target_tab}"
-                ))
+                if new_target_tab is not None:
+                    logger.info(self.create_course_log_message(
+                        f"Made available target tool in course's navigation: {new_target_tab}"
+                    ))
 
             # Always hide the source tool if it's available
             new_source_tab = await self.update_tool_tab(tab=source_tab, is_hidden=True)
-            logger.info(self.create_course_log_message(
-                f"Hid source tool in course's navigation: {new_source_tab}"
-            ))
+            if new_source_tab is not None:
+                logger.info(self.create_course_log_message(
+                    f"Hid source tool in course's navigation: {new_source_tab}"
+                ))
 
             return (new_source_tab, new_target_tab)
 
