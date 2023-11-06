@@ -24,13 +24,14 @@ class DB:
     def __init__(self, dialect: Dialect, params: DBParams):
         params['password'] = quote_plus(params['password'])
         core_string = '{user}:{password}@{host}:{port}/{name}'.format(**params)
-        self.engine = sqlalchemy.create_engine(f'{dialect.value}://{core_string}')
+        self.engine = sqlalchemy.create_engine(
+            f'{dialect.value}://{core_string}')
 
     def get_connection(self) -> sqlalchemy.engine.Connection:
         if self.connection is None:
             self.connection = self.engine.connect()
         return self.connection
-    
+
     def close_connection(self) -> None:
         if self.connection is not None:
             self.connection.close()

@@ -126,11 +126,11 @@ def run():
     env_file_name: str = os.path.join(root_dir, 'env')
 
     if os.path.exists(env_file_name):
-        logger.info(f'Setting environment from file "{env_file_name}".')
+        logger.info(f'Setting environment from file {repr(env_file_name)}.')
         load_dotenv(env_file_name, verbose=True)
     else:
-        logger.info(f'File "{env_file_name}" not found.  '
-                     'Using existing environment.')
+        logger.info(f'File {repr(env_file_name)} not found.  '
+                    'Using existing environment.')
 
     logger.info('Parameters from environment…')
 
@@ -226,6 +226,7 @@ def run():
     )
 
     logger.info('Migration complete.')
+
 
 if '__main__' == __name__:
     run()
