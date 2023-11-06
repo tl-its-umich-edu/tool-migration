@@ -6,7 +6,6 @@ from typing import Callable, TypeVar
 from data import CanvasEntity
 from exceptions import ConfigException
 
-
 logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=CanvasEntity)
@@ -27,7 +26,8 @@ def convert_csv_to_int_list(csv_string: str) -> list[int]:
     except ValueError:
         exception = ConfigException()
         exception.add_note(
-            'One or more of the items in a CSV configuration could not be converted to a string'
+            'One or more of the items in a CSV configuration '
+            'could not be converted to a string'
         )
         raise exception
     return int_list
@@ -35,9 +35,13 @@ def convert_csv_to_int_list(csv_string: str) -> list[int]:
 
 def chunk_integer(value: int, num_chunks: int) -> list[int]:
     if value < 0:
-        raise Exception('value parameter for chunk_integer must be zero or a positive integer.')
+        raise Exception(
+            'value parameter for chunk_integer must be '
+            'zero or a positive integer.')
     if num_chunks < 1:
-        raise Exception('num_chunks parameter for chunk_integer must be a positive integer.')
+        raise Exception(
+            'num_chunks parameter for chunk_integer must be '
+            'a positive integer.')
 
     chunks: list[int] = []
     div_floor = (value // num_chunks)
@@ -57,6 +61,8 @@ def time_execution(callable: Callable) -> Callable:
         result = await callable(*args, **kwargs)
         end = time.time()
         delta = end - start
-        logger.info(f'{callable.__qualname__} took {delta} seconds to complete.')
+        logger.info(
+            f'{callable.__qualname__} took {delta} seconds to complete.')
         return result
+
     return wrapper

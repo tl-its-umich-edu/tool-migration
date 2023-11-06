@@ -6,14 +6,13 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import httpx
+import trio
 from tenacity import (
     before_sleep_log,
     retry,
     retry_if_exception_type,
     stop_after_attempt
 )
-import trio
-
 
 logger = logging.getLogger(__name__)
 
@@ -35,11 +34,11 @@ class API:
     client: httpx.AsyncClient
 
     def __init__(
-        self,
-        url: str,
-        key: str,
-        endpoint_type: EndpointType = EndpointType.REST,
-        timeout: float = 10.0
+            self,
+            url: str,
+            key: str,
+            endpoint_type: EndpointType = EndpointType.REST,
+            timeout: float = 10.0
     ):
         headers = {'Authorization': f'Bearer {key}'}
         timeoutsConfiguration = httpx.Timeout(timeout, pool=None)
@@ -66,7 +65,8 @@ class API:
         before_sleep=before_sleep_log(logger, logging.WARN),
         sleep=trio.sleep
     )
-    async def get(self, url: str, params: dict[str, Any] | None = None) -> GetResponse:
+    async def get(self, url: str,
+                  params: dict[str, Any] | None = None) -> GetResponse:
         resp = await self.client.get(url=url, params=params)
         resp.raise_for_status()
         data = resp.json()
@@ -83,20 +83,23 @@ class API:
     async def put(self, url: str, params: dict[str, Any] | None = None) -> Any:
         resp = await self.client.put(url=url, params=params)
         if resp.status_code == httpx.codes.UNPROCESSABLE_ENTITY:
-            logger.warning(f"HTTP {resp.status_code}: PUT {resp.url}; response: '{resp.text}'")
+            logger.warning(
+                f'HTTP {resp.status_code}: PUT {resp.url}; '
+                f'response: {repr(resp.text)}')
             return None
         resp.raise_for_status()
         return resp.json()
 
     async def get_results_from_pages(
-        self, endpoint: str, params: dict[str, Any] | None = None, page_size: int = 50, limit: int | None = None
+            self, endpoint: str, params: dict[str, Any] | None = None,
+            page_size: int = 50, limit: int | None = None
     ) -> list[dict[str, Any]]:
         extra_params: dict[str, Any]
         if params is not None:
             extra_params = params
         else:
             extra_params = {}
-        extra_params.update({ 'per_page': page_size })
+        extra_params.update({'per_page': page_size})
 
         more_pages = True
         page_num = 1
