@@ -28,10 +28,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-class TrioProgress(trio.abc.Instrument):
+class tqdmLogging(tqdm):
+    """
+    FIXME: Ideally, a constructor should take a logger instance and log level
+    parameters, but tqdm calls `status_printer()` as a static method, so it
+    can't access instance variables anyway.
+    """
 
-    def __init__(self, total, **kwargs):
-        self.tqdm = tqdm(total=total, leave=None, **kwargs)
+    @staticmethod
+    def status_printer(_):
+        def logStatus(status):
+            logger.info(status)
+
+        return logStatus
+
+
+class TrioProgress(trio.abc.Instrument):
+    def __init__(self,
+                 total, **kwargs):
+        self.tqdm = tqdmLogging(total=total, mininterval=None,
+                                leave=False, **kwargs)
 
     def task_exited(self, task):
         if task.name.endswith('migrate_tool_for_course'):
