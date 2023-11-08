@@ -34,7 +34,8 @@ class TrioProgress(trio.abc.Instrument):
         self.tqdm = tqdm(total=total, leave=None, **kwargs)
 
     def task_exited(self, task):
-        self.tqdm.update(1)
+        if task.name.endswith('migrate_tool_for_course'):
+            self.tqdm.update(1)
 
 
 def find_tools_for_migrations(
