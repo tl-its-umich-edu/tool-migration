@@ -22,8 +22,7 @@ logging.basicConfig(
     level=logging.INFO,
     style='{',
     format='{asctime} | {levelname} | {module}:{lineno} | {message}',
-    handlers=[logging.StreamHandler(), summaryLogHandler]
-)
+    handlers=[logging.StreamHandler(), summaryLogHandler])
 
 logger = logging.getLogger(__name__)
 
@@ -70,8 +69,7 @@ def find_tools_for_migrations(
             raise InvalidToolIdsException(
                 'The following tool IDs from one of your migrations '
                 'were not found in the account: ' +
-                str(invalid_tool_ids)
-            )
+                str(invalid_tool_ids))
         tool_pairs.append((source_tool, target_tool))
     return tool_pairs
 
@@ -87,8 +85,7 @@ async def migrate_tool_for_course(api: API, course: Course,
         raise InvalidToolIdsException(
             'One or both of the following tool IDs are not available in '
             'this course: ' +
-            str([source_tool.id, target_tool.id])
-        )
+            str([source_tool.id, target_tool.id]))
     await course_manager.replace_tool_tab(source_tool_tab, target_tool_tab)
 
 
@@ -128,26 +125,16 @@ async def main(api: API, account_id: int, term_ids: list[int],
                 logger.info(f'Source tool: {source_tool}')
                 logger.info(f'Target tool: {target_tool}')
 
-                progress = TrioProgress(total=len(courses), unit='course')
+                progress = TrioProgress(total=len(courses), unit='courses')
                 trio.lowlevel.add_instrument(progress)
                 async with trio.open_nursery() as nursery:
                     for course in courses:
-                        nursery.start_soon(
-                            migrate_tool_for_course,
-                            api,
-                            course,
-                            source_tool,
-                            target_tool
-                        )
+                        nursery.start_soon(migrate_tool_for_course, api,
+                                           course, source_tool, target_tool)
                 trio.lowlevel.remove_instrument(progress)
 
 
 def run():
-    logging.basicConfig(
-        level=logging.INFO,
-        style='{',
-        format='{asctime} | {levelname} | {module}:{lineno} | {message}')
-
     logger.info('Starting migration…')
 
     # get configuration (either env. variables, cli flags, or direct input)
@@ -155,11 +142,11 @@ def run():
     env_file_name: str = os.path.join(root_dir, 'env')
 
     if os.path.exists(env_file_name):
-        logger.info(f'Setting environment from file "{env_file_name}".')
+        logger.info(f'Setting environment from file {repr(env_file_name)}.')
         load_dotenv(env_file_name, verbose=True)
     else:
-        logger.info(f'File "{env_file_name}" not found.  '
-                     'Using existing environment.')
+        logger.info(f'File {repr(env_file_name)} not found.  '
+                    'Using existing environment.')
 
     logger.info('Parameters from environment…')
 
@@ -235,27 +222,20 @@ def run():
             'Warehouse connection is configured, so it will be '
             'used for some data fetching…')
         db = DB(
-            Dialect.POSTGRES,
-            {
+            Dialect.POSTGRES, {
                 'host': wh_host,
                 'port': wh_port,
                 'name': wh_name,
                 'user': wh_user,
-                'password': wh_password
-            }
-        )
+                'password': wh_password})
     else:
         logger.warning('Warehouse connection is not fully configured, '
                        'so falling back to only using the Canvas API…')
 
-    trio.run(
-        main,
-        API(api_url, api_key),
-        account_id,
-        enrollment_term_ids,
-        [ToolMigration(source_id=source_tool_id, target_id=target_tool_id)],
-        db
-    )
+    trio.run(main, API(api_url, api_key), account_id,
+             enrollment_term_ids, [
+                 ToolMigration(source_id=source_tool_id,
+                               target_id=target_tool_id)], db)
 
     summaryLogHandler.flush()
     summaryLogBuffer.flush()
@@ -265,6 +245,7 @@ def run():
     logger.info(f'Log summary ends {"- " * 20}\n')
 
     logger.info('Migration complete.')
+
 
 if '__main__' == __name__:
     run()
