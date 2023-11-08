@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import nullcontext
+from io import StringIO
 
 import trio
 from dotenv import load_dotenv
@@ -13,13 +14,24 @@ from exceptions import InvalidToolIdsException
 from manager import AccountManagerFactory, CourseManager
 from utils import convert_csv_to_int_list, find_entity_by_id, time_execution
 
+summaryLogBuffer = StringIO()
+summaryLogHandler = logging.StreamHandler(summaryLogBuffer)
+summaryLogHandler.setLevel(logging.WARNING)
+
+logging.basicConfig(
+    level=logging.INFO,
+    style='{',
+    format='{asctime} | {levelname} | {module}:{lineno} | {message}',
+    handlers=[logging.StreamHandler(), summaryLogHandler]
+)
+
 logger = logging.getLogger(__name__)
 
 
 class TrioProgress(trio.abc.Instrument):
 
     def __init__(self, total, **kwargs):
-        self.tqdm = tqdm(total=total, **kwargs)
+        self.tqdm = tqdm(total=total, leave=None, **kwargs)
 
     def task_exited(self, task):
         self.tqdm.update(1)
@@ -99,7 +111,7 @@ async def main(api: API, account_id: int, term_ids: list[int],
                 logger.info(f'Source tool: {source_tool}')
                 logger.info(f'Target tool: {target_tool}')
 
-                progress = TrioProgress(total=len(courses))
+                progress = TrioProgress(total=len(courses), unit='course')
                 trio.lowlevel.add_instrument(progress)
                 async with trio.open_nursery() as nursery:
                     for course in courses:
@@ -137,24 +149,28 @@ def run():
     # Set up logging
     log_level_default = logging.INFO
     log_level = os.getenv('LOG_LEVEL', log_level_default)
-    logger.info(f'  LOG_LEVEL: {repr(log_level)}')
+    logger.info(f'  LOG_LEVEL: {repr(log_level)} '
+                f'({repr(logging.getLevelName(log_level))})')
     if log_level == '':
         log_level = log_level_default
-        logger.info(f'  Using default LOG_LEVEL: ({log_level})')
+        logger.info(f'  Using default LOG_LEVEL: {repr(log_level)} '
+                    f'({repr(logging.getLevelName(log_level))})')
 
     http_log_level_default = logging.WARNING
     http_log_level = os.getenv('HTTP_LOG_LEVEL', http_log_level_default)
-    logger.info(f'  HTTP_LOG_LEVEL: {repr(http_log_level)}')
+    logger.info(f'  HTTP_LOG_LEVEL: {repr(http_log_level)} '
+                f'({repr(logging.getLevelName(http_log_level))})')
     if http_log_level == '':
         http_log_level = http_log_level_default
-        logger.info(f'  Using default HTTP_LOG_LEVEL: ({http_log_level})')
+        logger.info(f'  Using default HTTP_LOG_LEVEL: {repr(http_log_level)} '
+                    f'({repr(logging.getLevelName(http_log_level))})')
 
     logging.basicConfig(level=log_level)
 
     httpx_logger = logging.getLogger('httpx')
     httpx_logger.setLevel(http_log_level)
-    httpcore_level = logging.getLogger('httpcore')
-    httpcore_level.setLevel(http_log_level)
+    httpcore_logger = logging.getLogger('httpcore')
+    httpcore_logger.setLevel(http_log_level)
 
     api_url: str = os.getenv('API_URL', '')
     logger.info(f'  API_URL: {repr(api_url)}')
@@ -212,9 +228,8 @@ def run():
             }
         )
     else:
-        logger.info(
-            'Warehouse connection is not configured, so falling back '
-            'to only using the Canvas API…')
+        logger.warning('Warehouse connection is not fully configured, '
+                       'so falling back to only using the Canvas API…')
 
     trio.run(
         main,
@@ -224,6 +239,13 @@ def run():
         [ToolMigration(source_id=source_tool_id, target_id=target_tool_id)],
         db
     )
+
+    summaryLogHandler.flush()
+    summaryLogBuffer.flush()
+
+    logger.info(f'Log summary (WARNING or higher): {"- " * 20}\n' +
+                summaryLogBuffer.getvalue())
+    logger.info(f'Log summary ends {"- " * 20}\n')
 
     logger.info('Migration complete.')
 
