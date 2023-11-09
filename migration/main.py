@@ -1,6 +1,7 @@
 import logging
 import os
 from contextlib import nullcontext
+from io import StringIO
 
 import trio
 from dotenv import load_dotenv
@@ -13,16 +14,43 @@ from exceptions import InvalidToolIdsException
 from manager import AccountManagerFactory, CourseManager
 from utils import convert_csv_to_int_list, find_entity_by_id, time_execution
 
+summaryLogBuffer = StringIO()
+summaryLogHandler = logging.StreamHandler(summaryLogBuffer)
+summaryLogHandler.setLevel(logging.WARNING)
+
+logging.basicConfig(
+    level=logging.INFO,
+    style='{',
+    format='{asctime} | {levelname} | {module}:{lineno} | {message}',
+    handlers=[logging.StreamHandler(), summaryLogHandler])
+
 logger = logging.getLogger(__name__)
 
 
-class TrioProgress(trio.abc.Instrument):
+class tqdmLogging(tqdm):
+    """
+    FIXME: Ideally, a constructor should take a logger instance and log level
+    parameters, but tqdm calls `status_printer()` as a static method, so it
+    can't access instance variables anyway.
+    """
 
-    def __init__(self, total, **kwargs):
-        self.tqdm = tqdm(total=total, **kwargs)
+    @staticmethod
+    def status_printer(_):
+        def logStatus(status):
+            logger.info(status)
+
+        return logStatus
+
+
+class TrioProgress(trio.abc.Instrument):
+    def __init__(self,
+                 total, **kwargs):
+        self.tqdm = tqdmLogging(total=total, mininterval=None,
+                                leave=False, **kwargs)
 
     def task_exited(self, task):
-        self.tqdm.update(1)
+        if task.name.endswith('migrate_tool_for_course'):
+            self.tqdm.update(1)
 
 
 def find_tools_for_migrations(
@@ -41,8 +69,7 @@ def find_tools_for_migrations(
             raise InvalidToolIdsException(
                 'The following tool IDs from one of your migrations '
                 'were not found in the account: ' +
-                str(invalid_tool_ids)
-            )
+                str(invalid_tool_ids))
         tool_pairs.append((source_tool, target_tool))
     return tool_pairs
 
@@ -58,8 +85,7 @@ async def migrate_tool_for_course(api: API, course: Course,
         raise InvalidToolIdsException(
             'One or both of the following tool IDs are not available in '
             'this course: ' +
-            str([source_tool.id, target_tool.id])
-        )
+            str([source_tool.id, target_tool.id]))
     await course_manager.replace_tool_tab(source_tool_tab, target_tool_tab)
 
 
@@ -99,26 +125,16 @@ async def main(api: API, account_id: int, term_ids: list[int],
                 logger.info(f'Source tool: {source_tool}')
                 logger.info(f'Target tool: {target_tool}')
 
-                progress = TrioProgress(total=len(courses))
+                progress = TrioProgress(total=len(courses), unit='courses')
                 trio.lowlevel.add_instrument(progress)
                 async with trio.open_nursery() as nursery:
                     for course in courses:
-                        nursery.start_soon(
-                            migrate_tool_for_course,
-                            api,
-                            course,
-                            source_tool,
-                            target_tool
-                        )
+                        nursery.start_soon(migrate_tool_for_course, api,
+                                           course, source_tool, target_tool)
                 trio.lowlevel.remove_instrument(progress)
 
 
 def run():
-    logging.basicConfig(
-        level=logging.INFO,
-        style='{',
-        format='{asctime} | {levelname} | {module}:{lineno} | {message}')
-
     logger.info('Starting migration…')
 
     # get configuration (either env. variables, cli flags, or direct input)
@@ -137,24 +153,28 @@ def run():
     # Set up logging
     log_level_default = logging.INFO
     log_level = os.getenv('LOG_LEVEL', log_level_default)
-    logger.info(f'  LOG_LEVEL: {repr(log_level)}')
+    logger.info(f'  LOG_LEVEL: {repr(log_level)} '
+                f'({repr(logging.getLevelName(log_level))})')
     if log_level == '':
         log_level = log_level_default
-        logger.info(f'  Using default LOG_LEVEL: ({log_level})')
+        logger.info(f'  Using default LOG_LEVEL: {repr(log_level)} '
+                    f'({repr(logging.getLevelName(log_level))})')
 
     http_log_level_default = logging.WARNING
     http_log_level = os.getenv('HTTP_LOG_LEVEL', http_log_level_default)
-    logger.info(f'  HTTP_LOG_LEVEL: {repr(http_log_level)}')
+    logger.info(f'  HTTP_LOG_LEVEL: {repr(http_log_level)} '
+                f'({repr(logging.getLevelName(http_log_level))})')
     if http_log_level == '':
         http_log_level = http_log_level_default
-        logger.info(f'  Using default HTTP_LOG_LEVEL: ({http_log_level})')
+        logger.info(f'  Using default HTTP_LOG_LEVEL: {repr(http_log_level)} '
+                    f'({repr(logging.getLevelName(http_log_level))})')
 
     logging.basicConfig(level=log_level)
 
     httpx_logger = logging.getLogger('httpx')
     httpx_logger.setLevel(http_log_level)
-    httpcore_level = logging.getLogger('httpcore')
-    httpcore_level.setLevel(http_log_level)
+    httpcore_logger = logging.getLogger('httpcore')
+    httpcore_logger.setLevel(http_log_level)
 
     api_url: str = os.getenv('API_URL', '')
     logger.info(f'  API_URL: {repr(api_url)}')
@@ -190,8 +210,14 @@ def run():
     wh_password = os.getenv('WH_PASSWORD')
     logger.info(f'  WH_PASSWORD: *REDACTED*')
 
+    wh_disabled_param = os.getenv('WH_DISABLED', 'false')
+    wh_disabled = wh_disabled_param.lower() in ('true', 'yes', '1')
+    logger.info(f'  WH_DISABLED: {repr(wh_disabled_param)} '
+                f'({repr(wh_disabled)})')
+
     db: DB | None = None
     if (
+            not wh_disabled and
             wh_host is not None and
             wh_port is not None and
             wh_name is not None and
@@ -200,30 +226,30 @@ def run():
     ):
         logger.info(
             'Warehouse connection is configured, so it will be '
-            'used for some data fetching…')
+            'used to fetch some data quicker…')
         db = DB(
-            Dialect.POSTGRES,
-            {
+            Dialect.POSTGRES, {
                 'host': wh_host,
                 'port': wh_port,
                 'name': wh_name,
                 'user': wh_user,
-                'password': wh_password
-            }
-        )
+                'password': wh_password})
     else:
-        logger.info(
-            'Warehouse connection is not configured, so falling back '
-            'to only using the Canvas API…')
+        logger.warning('Warehouse connection is disabled or not fully '
+                       'configured, so falling back to only using the '
+                       'Canvas API…')
 
-    trio.run(
-        main,
-        API(api_url, api_key),
-        account_id,
-        enrollment_term_ids,
-        [ToolMigration(source_id=source_tool_id, target_id=target_tool_id)],
-        db
-    )
+    trio.run(main, API(api_url, api_key), account_id,
+             enrollment_term_ids, [
+                 ToolMigration(source_id=source_tool_id,
+                               target_id=target_tool_id)], db)
+
+    summaryLogHandler.flush()
+    summaryLogBuffer.flush()
+
+    logger.info(f'Log summary (WARNING or higher): {"- " * 20}\n' +
+                summaryLogBuffer.getvalue())
+    logger.info(f'Log summary ends {"- " * 20}\n')
 
     logger.info('Migration complete.')
 
