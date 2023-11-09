@@ -211,13 +211,13 @@ def run():
     logger.info(f'  WH_PASSWORD: *REDACTED*')
 
     wh_disabled_param = os.getenv('WH_DISABLED', 'false')
-    whDisabled = wh_disabled_param.lower() in ('true', 'yes', '1')
+    wh_disabled = wh_disabled_param.lower() in ('true', 'yes', '1')
     logger.info(f'  WH_DISABLED: {repr(wh_disabled_param)} '
-                f'({repr(whDisabled)})')
+                f'({repr(wh_disabled)})')
 
     db: DB | None = None
     if (
-            not whDisabled and
+            not wh_disabled and
             wh_host is not None and
             wh_port is not None and
             wh_name is not None and
