@@ -210,8 +210,14 @@ def run():
     wh_password = os.getenv('WH_PASSWORD')
     logger.info(f'  WH_PASSWORD: *REDACTED*')
 
+    wh_disabled_param = os.getenv('WH_DISABLED', 'false')
+    whDisabled = wh_disabled_param.lower() in ('true', 'yes', '1')
+    logger.info(f'  WH_DISABLED: {repr(wh_disabled_param)} '
+                f'({repr(whDisabled)})')
+
     db: DB | None = None
     if (
+            not whDisabled and
             wh_host is not None and
             wh_port is not None and
             wh_name is not None and
@@ -220,7 +226,7 @@ def run():
     ):
         logger.info(
             'Warehouse connection is configured, so it will be '
-            'used for some data fetching…')
+            'used to fetch some data quicker…')
         db = DB(
             Dialect.POSTGRES, {
                 'host': wh_host,
@@ -229,8 +235,9 @@ def run():
                 'user': wh_user,
                 'password': wh_password})
     else:
-        logger.warning('Warehouse connection is not fully configured, '
-                       'so falling back to only using the Canvas API…')
+        logger.warning('Warehouse connection is disabled or not fully '
+                       'configured, so falling back to only using the '
+                       'Canvas API…')
 
     trio.run(main, API(api_url, api_key), account_id,
              enrollment_term_ids, [
