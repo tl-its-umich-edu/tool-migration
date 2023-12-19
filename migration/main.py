@@ -100,10 +100,10 @@ async def main(api: API, account_id: int, term_ids: list[int],
             account_name = await account_manager.get_name()
             logger.info(f'Account ({account_id}) name: {repr(account_name)}')
 
-            term_names = await account_manager.get_term_names(term_ids)
-            logger.info(f'Term names…')
-            for term_id in term_ids:
-                logger.info(f'  Term ({term_id}): {repr(term_names[term_id])}')
+            # term_names = await account_manager.get_term_names(term_ids)
+            logger.info(f'Term names… (temporarily disabled; see issue #40)')
+            # for term_id in term_ids:
+            #     logger.info(f'  Term ({term_id}): {repr(term_names[term_id])}')
 
             tools = await account_manager.get_tools_installed_in_account()
             logger.info(
